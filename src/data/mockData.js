@@ -3,6 +3,7 @@ export const navItems = [
   { id: "builder", label: "Resume Builder", icon: "📄" },
   { id: "analyzer", label: "Resume Analyzer", icon: "🔍" },
   { id: "jobmatch", label: "Job Match", icon: "🎯" },
+  { id: "joboffers", label: "Job Offers", icon: "💼" },
   { id: "interview", label: "Interview Practice", icon: "🎤" },
   { id: "history", label: "History", icon: "🕒" },
   { id: "templates", label: "Templates", icon: "🎨" },
