@@ -28,17 +28,18 @@ export async function sendEmail({ to, subject, text, html }) {
   console.log("====================================");
 
   const transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port,
-    secure: port === 465,
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  });
+  host: SMTP_HOST,
+  port,
+  secure: port === 465,
+  family: 4, // Force IPv4 because Render may fail with Gmail IPv6
+  auth: {
+    user: SMTP_USER,
+    pass: SMTP_PASS,
+  },
+  connectionTimeout: 10000,
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
+});
 
   try {
     await transporter.verify();
