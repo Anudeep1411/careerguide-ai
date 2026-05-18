@@ -5,12 +5,12 @@ import { apiRequest } from "../utils/api";
 
 export function ResumeAnalyzer({ setPage }) {
  const [targetRole, setTargetRole] = useState(
-  () => localStorage.getItem("cg_analyzer_target_role") || "Frontend Developer"
+  () => localStorage.getItem("cg_analyzer_target_role") || ""
 );
  const [resumeText, setResumeText] = useState(
   () =>
     localStorage.getItem("cg_analyzer_resume_text") ||
-    "Anudeep Frontend Developer. Skills: HTML CSS JavaScript React Tailwind Git. Project: DSA Visualizer built using React and Tailwind CSS. GitHub: github.com/Anudeep1411. Deployment on Vercel."
+    ""
 );
 
   const [analysis, setAnalysis] = useState(null);

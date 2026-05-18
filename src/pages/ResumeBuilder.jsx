@@ -77,24 +77,26 @@ const emptyCustomSection = {
 };
 
 export function ResumeBuilder({ setPage }) {
+  const RESUME_DRAFT_KEY = "cg_resume_builder_draft";
+const ANALYZER_TEXT_KEY = "cg_analyzer_resume_text";
+const ANALYZER_ROLE_KEY = "cg_analyzer_target_role";
   const resumePdfRef = useRef(null);
    const [editingResumeId, setEditingResumeId] = useState(null);
   const [selectedTemplate, setSelectedTemplate] = useState(allTemplates[1]);
-
+  const loggedUser = JSON.parse(localStorage.getItem("cg_user") || "{}");
   const [personalDetails, setPersonalDetails] = useState({
-    name: "Anudeep",
-    email: "anudeep@test.com",
-    phone: "9999999999",
-    location: "India",
-    linkedin: "",
-    github: "https://github.com/Anudeep1411",
-    portfolio: "",
-    leetcode: "",
-    hackerrank: "",
-    codechef: "",
-    geeksforgeeks: "",
-  });
-
+  name: loggedUser?.name || "Sample Candidate",
+  email: loggedUser?.email || "sample@example.com",
+  phone: "9876543210",
+  location: "India",
+  linkedin: "https://linkedin.com/in/sample",
+  github: "https://github.com/Anudeep1411",
+  portfolio: "",
+  leetcode: "",
+  hackerrank: "",
+  codechef: "",
+  geeksforgeeks: "",
+});
   const [careerDetails, setCareerDetails] = useState({
     targetRole: "",
     experienceLevel: "",
@@ -777,7 +779,7 @@ ${interests}
 <!DOCTYPE html>
 <html>
 <head>
-  <title>${safe(personalDetails.name || "Resume")}</title>
+  <title>Resume</title>
   <style>
     @page {
       size: A4;
@@ -2269,7 +2271,7 @@ function ResumeActions({
       </div>
 
       <div className="mt-4 rounded-2xl bg-indigo-600/10 p-3 text-xs leading-5 text-slate-600 dark:text-slate-300">
-        Tip: For clickable links in PDF, use Chrome destination “Save as PDF”.
+      Tip: Print dialog lo “Headers and footers” OFF cheyyi. Clickable links kosam Chrome “Save as PDF” use cheyyi.
       </div>
     </Card>
   );

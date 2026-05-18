@@ -70,7 +70,10 @@ export default function App() {
     localStorage.removeItem("cg_token");
     localStorage.removeItem("cg_user");
     localStorage.removeItem("cg_current_page");
-
+    localStorage.removeItem("cg_edit_resume_id");
+localStorage.removeItem("cg_edit_resume_data");
+localStorage.removeItem("cg_analyzer_resume_text");
+localStorage.removeItem("cg_analyzer_target_role");
     setUser(null);
     setPage("login");
   }

@@ -4,15 +4,15 @@ import { roles } from "../data/mockData";
 import { apiRequest } from "../utils/api";
 
 export function JobMatch({ setPage }) {
-  const [targetRole, setTargetRole] = useState("Frontend Developer");
+  const [targetRole, setTargetRole] = useState("");
   const [companyName, setCompanyName] = useState("Demo Company");
 
   const [resumeText, setResumeText] = useState(
-    "Anudeep Frontend Developer. Skills: HTML CSS JavaScript React Tailwind Git GitHub. Project: DSA Visualizer built using React and Tailwind CSS. Deployment on Vercel."
+    ""
   );
 
   const [jobDescription, setJobDescription] = useState(
-    "We are hiring a Frontend Developer with skills in HTML, CSS, JavaScript, React, Git, Responsive Design, Tailwind and deployment experience."
+    ""
   );
 
   const [jobMatch, setJobMatch] = useState(null);
