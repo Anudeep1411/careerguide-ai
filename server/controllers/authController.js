@@ -38,7 +38,13 @@ async function createOtpAndSendEmail({ email, purpose }) {
     purpose,
     expiresAt: new Date(Date.now() + expiresMinutes * 60 * 1000),
   });
-
+  console.log("====================================");
+console.log("CAREERGUIDE AI RESET/SIGNUP OTP GENERATED");
+console.log("Email:", email);
+console.log("Purpose:", purpose);
+console.log("OTP:", otp);
+console.log("Expires in minutes:", expiresMinutes);
+console.log("====================================");
   const purposeText =
     purpose === "signup" ? "complete your signup" : "reset your password";
 
