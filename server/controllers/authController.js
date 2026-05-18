@@ -1,6 +1,5 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-
 import User from "../models/User.js";
 import Otp from "../models/Otp.js";
 import { sendEmail } from "../utils/sendEmail.js";
@@ -31,7 +30,6 @@ async function createOtpAndSendEmail({ email, purpose }) {
   });
 
   const otpHash = await bcrypt.hash(otp, 10);
-
   const expiresMinutes = Number(process.env.OTP_EXPIRES_MINUTES || 5);
 
   await Otp.create({
@@ -49,12 +47,10 @@ async function createOtpAndSendEmail({ email, purpose }) {
     subject: `CareerGuide AI OTP - ${otp}`,
     text: `Your CareerGuide AI OTP is ${otp}. Use it to ${purposeText}. This OTP expires in ${expiresMinutes} minutes.`,
     html: `
-      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
-        <h2>CareerGuide AI Verification</h2>
-        <p>Your OTP is:</p>
-        <h1 style="letter-spacing: 6px;">${otp}</h1>
-        <p>This OTP expires in ${expiresMinutes} minutes.</p>
-      </div>
+      <h2>CareerGuide AI Verification</h2>
+      <p>Your OTP is:</p>
+      <h1>${otp}</h1>
+      <p>This OTP expires in ${expiresMinutes} minutes.</p>
     `,
   });
 
@@ -204,12 +200,13 @@ export const verifySignupOtp = async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
+    // IMPORTANT:
+    // Plain password pampistunnam.
+    // User model pre-save hook password ni hash chesthundi.
     const user = await User.create({
       name,
       email: cleanEmail,
-      password: hashedPassword,
+      password,
       targetRole: targetRole || "Fresher",
     });
 
@@ -271,13 +268,12 @@ export const signup = async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-
+    // Plain password only. User model hashes it once.
     const user = await User.create({
       name,
       email: cleanEmail,
-      password: hashedPassword,
-      targetRole,
+      password,
+      targetRole: targetRole || "Fresher",
     });
 
     const token = generateToken(user._id);
@@ -449,13 +445,7 @@ export const resetPasswordWithOtp = async (req, res) => {
       });
     }
 
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-    const user = await User.findOneAndUpdate(
-      { email: cleanEmail },
-      { password: hashedPassword },
-      { new: true }
-    );
+    const user = await User.findOne({ email: cleanEmail });
 
     if (!user) {
       return res.status(404).json({
@@ -463,6 +453,10 @@ export const resetPasswordWithOtp = async (req, res) => {
         message: "User not found",
       });
     }
+
+    // save() use chesthe User model pre-save hook hash chesthundi.
+    user.password = newPassword;
+    await user.save();
 
     res.json({
       success: true,
@@ -480,12 +474,12 @@ export const resetPasswordWithOtp = async (req, res) => {
 export const demoLogin = async (req, res) => {
   try {
     const demoEmail = `demo${Date.now()}@careerguide.ai`;
-    const hashedPassword = await bcrypt.hash("123456", 10);
 
+    // Plain password only. User model hashes it once.
     const user = await User.create({
       name: "Demo User",
       email: demoEmail,
-      password: hashedPassword,
+      password: "123456",
       targetRole: "Frontend Developer",
     });
 

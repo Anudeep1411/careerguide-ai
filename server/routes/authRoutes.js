@@ -21,7 +21,8 @@ router.post("/verify-signup-otp", verifySignupOtp);
 
 router.post("/forgot-password/send-otp", sendForgotPasswordOtp);
 router.post("/forgot-password/reset", resetPasswordWithOtp);
-
+router.post("/send-reset-otp", sendForgotPasswordOtp);
+router.post("/reset-password", resetPasswordWithOtp);
 router.post("/demo", demoLogin);
 
 router.get("/profile", protect, getProfile);
