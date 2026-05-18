@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import dns from "dns/promises";
 
 export async function sendEmail({ to, subject, text, html }) {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
@@ -17,7 +18,7 @@ export async function sendEmail({ to, subject, text, html }) {
     };
   }
 
-  const port = Number(SMTP_PORT || 587);
+  const port = Number(SMTP_PORT || 465);
 
   console.log("====================================");
   console.log("SMTP EMAIL SEND STARTED");
@@ -27,19 +28,31 @@ export async function sendEmail({ to, subject, text, html }) {
   console.log("TO:", to);
   console.log("====================================");
 
+  let smtpHostForConnection = SMTP_HOST;
+
+  try {
+    const ipv4 = await dns.lookup(SMTP_HOST, { family: 4 });
+    smtpHostForConnection = ipv4.address;
+    console.log("SMTP IPv4 resolved:", smtpHostForConnection);
+  } catch (error) {
+    console.error("SMTP IPv4 resolve failed:", error.message);
+  }
+
   const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port,
-  secure: port === 465,
-  family: 4, // Force IPv4 because Render may fail with Gmail IPv6
-  auth: {
-    user: SMTP_USER,
-    pass: SMTP_PASS,
-  },
-  connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
-});
+    host: smtpHostForConnection,
+    port,
+    secure: port === 465,
+    auth: {
+      user: SMTP_USER,
+      pass: SMTP_PASS,
+    },
+    tls: {
+      servername: SMTP_HOST,
+    },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
+  });
 
   try {
     await transporter.verify();
@@ -62,7 +75,6 @@ export async function sendEmail({ to, subject, text, html }) {
     };
   } catch (error) {
     console.error("SMTP EMAIL ERROR:", error.message);
-
     throw new Error(`Email send failed: ${error.message}`);
   }
 }
