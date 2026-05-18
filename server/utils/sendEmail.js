@@ -17,26 +17,51 @@ export async function sendEmail({ to, subject, text, html }) {
     };
   }
 
+  const port = Number(SMTP_PORT || 587);
+
+  console.log("====================================");
+  console.log("SMTP EMAIL SEND STARTED");
+  console.log("SMTP_HOST:", SMTP_HOST);
+  console.log("SMTP_PORT:", port);
+  console.log("SMTP_USER:", SMTP_USER);
+  console.log("TO:", to);
+  console.log("====================================");
+
   const transporter = nodemailer.createTransport({
     host: SMTP_HOST,
-    port: Number(SMTP_PORT || 587),
-    secure: false,
+    port,
+    secure: port === 465,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 
-  await transporter.sendMail({
-    from: SMTP_FROM || SMTP_USER,
-    to,
-    subject,
-    text,
-    html,
-  });
+  try {
+    await transporter.verify();
+    console.log("SMTP verified successfully");
 
-  return {
-    success: true,
-    mode: "email",
-  };
+    const info = await transporter.sendMail({
+      from: SMTP_FROM || SMTP_USER,
+      to,
+      subject,
+      text,
+      html,
+    });
+
+    console.log("Email sent successfully:", info.messageId);
+
+    return {
+      success: true,
+      mode: "email",
+      messageId: info.messageId,
+    };
+  } catch (error) {
+    console.error("SMTP EMAIL ERROR:", error.message);
+
+    throw new Error(`Email send failed: ${error.message}`);
+  }
 }
