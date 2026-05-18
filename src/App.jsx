@@ -16,15 +16,19 @@ export default function App() {
 
   const [page, setPage] = useState(() => {
     const savedUser = load("cg_user", null);
-    const savedPage = load("cg_current_page", "dashboard");
+    const savedPage = localStorage.getItem("cg_current_page");
 
-    if (savedUser) {
-      return savedPage === "login" || savedPage === "signup"
-        ? "dashboard"
-        : savedPage;
+    if (!savedUser) return "login";
+
+    if (
+      savedPage &&
+      savedPage !== "login" &&
+      savedPage !== "signup"
+    ) {
+      return savedPage;
     }
 
-    return "login";
+    return "dashboard";
   });
 
   useEffect(() => {
@@ -34,17 +38,22 @@ export default function App() {
 
   useEffect(() => {
     if (user && page !== "login" && page !== "signup") {
-      save("cg_current_page", page);
+      localStorage.setItem("cg_current_page", page);
     }
   }, [page, user]);
 
   function handleSetPage(nextPage) {
     if (!user && nextPage !== "login" && nextPage !== "signup") {
       setPage("login");
+      localStorage.setItem("cg_current_page", "login");
       return;
     }
 
     setPage(nextPage);
+
+    if (nextPage !== "login" && nextPage !== "signup") {
+      localStorage.setItem("cg_current_page", nextPage);
+    }
   }
 
   function handleSetUser(nextUser) {
@@ -52,6 +61,7 @@ export default function App() {
 
     if (nextUser) {
       save("cg_user", nextUser);
+      localStorage.setItem("cg_current_page", "dashboard");
       setPage("dashboard");
     }
   }
@@ -91,7 +101,7 @@ export default function App() {
     }
 
     if (page === "history") {
-      return <History />;
+      return <History setPage={handleSetPage} />;
     }
 
     if (page === "templates") {
@@ -113,7 +123,7 @@ export default function App() {
     return (
       <Auth
         mode={page === "signup" ? "signup" : "login"}
-        setPage={setPage}
+        setPage={handleSetPage}
         setUser={handleSetUser}
       />
     );

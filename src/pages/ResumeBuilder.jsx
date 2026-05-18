@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect,useMemo, useRef, useState } from "react";
 import { Button, Card, PageHeader } from "../components/Layout";
 import { apiRequest } from "../utils/api";
 
@@ -78,7 +78,7 @@ const emptyCustomSection = {
 
 export function ResumeBuilder({ setPage }) {
   const resumePdfRef = useRef(null);
-
+   const [editingResumeId, setEditingResumeId] = useState(null);
   const [selectedTemplate, setSelectedTemplate] = useState(allTemplates[1]);
 
   const [personalDetails, setPersonalDetails] = useState({
@@ -167,7 +167,94 @@ export function ResumeBuilder({ setPage }) {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  useEffect(() => {
+    const editResumeId = localStorage.getItem("cg_edit_resume_id");
+    const editResumeData = localStorage.getItem("cg_edit_resume_data");
 
+    if (!editResumeData) return;
+
+    try {
+      const resume = JSON.parse(editResumeData);
+
+      setEditingResumeId(editResumeId || resume._id || null);
+
+      if (resume.personalDetails) {
+        setPersonalDetails((prev) => ({
+          ...prev,
+          ...resume.personalDetails,
+        }));
+      }
+
+      if (resume.careerDetails) {
+        setCareerDetails((prev) => ({
+          ...prev,
+          ...resume.careerDetails,
+        }));
+      }
+
+      const savedSkills = resume.skills || {};
+
+      setSkills({
+        programmingLanguages: Array.isArray(savedSkills.programmingLanguages)
+          ? savedSkills.programmingLanguages.join(", ")
+          : savedSkills.programmingLanguages || "",
+        frontend: Array.isArray(savedSkills.frontend)
+          ? savedSkills.frontend.join(", ")
+          : savedSkills.frontend || "",
+        backend: Array.isArray(savedSkills.backend)
+          ? savedSkills.backend.join(", ")
+          : savedSkills.backend || "",
+        databases: Array.isArray(savedSkills.databases)
+          ? savedSkills.databases.join(", ")
+          : savedSkills.databases || "",
+        tools: Array.isArray(savedSkills.tools)
+          ? savedSkills.tools.join(", ")
+          : savedSkills.tools || "",
+        softSkills: Array.isArray(savedSkills.softSkills)
+          ? savedSkills.softSkills.join(", ")
+          : savedSkills.softSkills || "",
+      });
+
+      setEducation(Array.isArray(resume.education) ? resume.education : []);
+      setProjects(Array.isArray(resume.projects) ? resume.projects : []);
+      setExperience(Array.isArray(resume.experience) ? resume.experience : []);
+      setCertifications(
+        Array.isArray(resume.certifications) ? resume.certifications : []
+      );
+      setAchievements(
+        Array.isArray(resume.achievements) ? resume.achievements : []
+      );
+
+      setLanguages(
+        Array.isArray(resume.languages) ? resume.languages.join(", ") : ""
+      );
+
+      setInterests(
+        Array.isArray(resume.interests) ? resume.interests.join(", ") : ""
+      );
+
+      setCustomSections(
+        Array.isArray(resume.customSections) ? resume.customSections : []
+      );
+
+      if (resume.template) {
+        const matchedTemplate = allTemplates.find(
+          (template) =>
+            template.layout === resume.template.layout &&
+            template.color === resume.template.color
+        );
+
+        if (matchedTemplate) {
+          setSelectedTemplate(matchedTemplate);
+        }
+      }
+
+     
+    } catch (err) {
+      console.error("Failed to load edit resume:", err);
+      setError("Failed to load saved resume for editing");
+    }
+  }, []);
   function splitText(value = "") {
     return value
       .split(",")
@@ -277,13 +364,19 @@ export function ResumeBuilder({ setPage }) {
         },
         resumeChecklist: checklist,
       };
+const endpoint = editingResumeId ? `/resumes/${editingResumeId}` : "/resumes";
+const method = editingResumeId ? "PUT" : "POST";
 
-      await apiRequest("/resumes", {
-        method: "POST",
-        body: JSON.stringify(resumeData),
-      });
+await apiRequest(endpoint, {
+  method,
+  body: JSON.stringify(resumeData),
+});
 
-      setMessage("Resume saved successfully ✅");
+if (editingResumeId) {
+  setMessage("Resume updated successfully ✅");
+} else {
+  setMessage("Resume saved successfully ✅");
+}
     } catch (err) {
       setError(err.message || "Failed to save resume");
     } finally {
@@ -389,238 +482,298 @@ ${interests}
     setPage("analyzer");
   }
 
-  function downloadResumePdf() {
-    try {
-      setError("");
-      setMessage("Opening professional resume print page...");
+ function downloadResumePdf() {
+  try {
+    setError("");
+    setMessage("Opening professional resume print page...");
 
-      const accent = selectedTemplate?.accent || "#0f4c81";
-      const layoutName = selectedTemplate?.layout || "Minimal ATS";
+    const accent = selectedTemplate?.accent || "#0f4c81";
+    const layoutName = selectedTemplate?.layout || "Minimal ATS";
 
-      const isMinimal = layoutName.includes("Minimal");
-      const isSidebar = layoutName.includes("Sidebar");
-      const isTwoColumn = layoutName.includes("Two Column");
-      const isModern =
-        layoutName.includes("Modern") ||
-        layoutName.includes("Developer") ||
-        layoutName.includes("Pro") ||
-        layoutName.includes("Product") ||
-        layoutName.includes("Service");
+    const isMinimal = layoutName.includes("Minimal");
+    const isSidebar = layoutName.includes("Sidebar");
+    const isTwoColumn = layoutName.includes("Two Column");
+    const isModern =
+      layoutName.includes("Modern") ||
+      layoutName.includes("Developer") ||
+      layoutName.includes("Pro") ||
+      layoutName.includes("Product") ||
+      layoutName.includes("Service");
 
-      const safe = (value = "") =>
-        String(value)
-          .replaceAll("&", "&amp;")
-          .replaceAll("<", "&lt;")
-          .replaceAll(">", "&gt;")
-          .replaceAll('"', "&quot;")
-          .replaceAll("'", "&#039;")
-          .trim();
+    const safe = (value = "") =>
+      String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;")
+        .trim();
 
-      const hasValue = (value) => Boolean(String(value || "").trim());
+    const hasValue = (value) => Boolean(String(value || "").trim());
 
-      const formatUrlForPrint = (url = "") => {
-        if (!url) return "";
-        return url.startsWith("http://") || url.startsWith("https://")
-          ? url
-          : `https://${url}`;
-      };
+    const hasAnyValue = (obj) =>
+      Object.values(obj || {}).some((value) => hasValue(value));
 
-      const anchor = (label, url) => {
-        if (!hasValue(url)) return "";
-        return `<a href="${formatUrlForPrint(
-          url
-        )}" target="_blank" rel="noopener noreferrer">${label}</a>`;
-      };
+    const formatUrlForPrint = (url = "") => {
+      if (!url) return "";
+      return url.startsWith("http://") || url.startsWith("https://")
+        ? url
+        : `https://${url}`;
+    };
 
-      const cleanList = (value = "") =>
-        value
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean)
-          .join(", ");
+    const anchor = (label, url) => {
+      if (!hasValue(url)) return "";
+      return `<a href="${formatUrlForPrint(
+        url
+      )}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+    };
 
-      const profileLinks = [
-        personalDetails.linkedin
-          ? `LinkedIn: ${anchor("linkedin.com", personalDetails.linkedin)}`
-          : "",
-        personalDetails.github
-          ? `Github: ${anchor("github.com", personalDetails.github)}`
-          : "",
-        personalDetails.leetcode
-          ? `Leetcode: ${anchor("leetcode.com", personalDetails.leetcode)}`
-          : "",
-        personalDetails.portfolio
-          ? `Portfolio: ${anchor("portfolio", personalDetails.portfolio)}`
-          : "",
-        personalDetails.hackerrank
-          ? `HackerRank: ${anchor("hackerrank.com", personalDetails.hackerrank)}`
-          : "",
-        personalDetails.codechef
-          ? `CodeChef: ${anchor("codechef.com", personalDetails.codechef)}`
-          : "",
-        personalDetails.geeksforgeeks
-          ? `GeeksforGeeks: ${anchor(
-              "geeksforgeeks.org",
-              personalDetails.geeksforgeeks
-            )}`
-          : "",
-      ].filter(Boolean);
-
-      const skillsHtml = [
-        ["Programming", cleanList(skills.programmingLanguages)],
-        ["Web Development", cleanList(skills.frontend)],
-        ["Backend", cleanList(skills.backend)],
-        ["Databases", cleanList(skills.databases)],
-        ["Tools", cleanList(skills.tools)],
-        ["Soft Skills", cleanList(skills.softSkills)],
-      ]
-        .filter(([, value]) => hasValue(value))
-        .map(([label, value]) => `<p><b>${label}:</b> ${safe(value)}</p>`)
-        .join("");
-
-      const educationHtml = education
-        .filter(
-          (edu) =>
-            hasValue(edu.degree) ||
-            hasValue(edu.college) ||
-            hasValue(edu.university)
-        )
-        .map(
-          (edu) => `
-            <div class="block">
-              <h3>${safe(edu.degree)}</h3>
-              ${hasValue(edu.college) ? `<p>${safe(edu.college)}</p>` : ""}
-              ${hasValue(edu.university) ? `<p>${safe(edu.university)}</p>` : ""}
-              ${hasValue(edu.year) ? `<p>(${safe(edu.year)})</p>` : ""}
-              ${
-                hasValue(edu.score)
-                  ? `<p><b>Score:</b> ${safe(edu.score)}</p>`
-                  : ""
-              }
-              ${
-                hasValue(edu.coursework)
-                  ? `<p><b>Coursework:</b> ${safe(edu.coursework)}</p>`
-                  : ""
-              }
-            </div>
-          `
-        )
-        .join("");
-
-      const internshipHtml = experience
-        .filter((item) => hasValue(item.company) || hasValue(item.role))
-        .map(
-          (item) => `
-            <div class="block">
-              <div class="inline-row">
-                <h3>${safe(item.company || item.role)}</h3>
-                <span>${safe(item.duration)}</span>
-              </div>
-              ${hasValue(item.role) ? `<p><b>${safe(item.role)}</b></p>` : ""}
-              ${
-                hasValue(item.description)
-                  ? `<ul><li>${safe(item.description)}</li></ul>`
-                  : ""
-              }
-            </div>
-          `
-        )
-        .join("");
-
-      const certificationsHtml = certifications
-        .filter((cert) => hasValue(cert.title))
-        .map(
-          (cert) => `
-            <li>
-              ${safe(cert.title)}
-              ${hasValue(cert.issuer) ? ` - ${safe(cert.issuer)}` : ""}
-              ${hasValue(cert.year) ? ` (${safe(cert.year)})` : ""}
-              ${
-                hasValue(cert.link)
-                  ? ` ${anchor("(Certificate Link)", cert.link)}`
-                  : ""
-              }
-            </li>
-          `
-        )
-        .join("");
-
-      const projectHtml = projects
-        .filter(
-          (project) => hasValue(project.title) || hasValue(project.description)
-        )
-        .map((project) => {
-          const links = [
-            anchor("(Live Link)", project.liveLink),
-            anchor("(Github Link)", project.githubLink),
-          ]
-            .filter(Boolean)
-            .join(" ");
-
-          const bullets = [
-            project.description,
-            project.features,
-            project.challenges,
-          ]
-            .filter(hasValue)
-            .map((point) => `<li>${safe(point)}</li>`)
-            .join("");
-
-          return `
-            <div class="project-block">
-              <h3>${safe(project.title)}</h3>
-              ${links ? `<p class="project-links">${links}</p>` : ""}
-              ${
-                hasValue(project.techStack)
-                  ? `<p class="tech"><b>Tech Stack:</b> ${safe(
-                      project.techStack
-                    )}</p>`
-                  : ""
-              }
-              ${bullets ? `<ul>${bullets}</ul>` : ""}
-            </div>
-          `;
-        })
-        .join("");
-
-      const achievementsHtml = achievements
-        .filter((item) => hasValue(item.title) || hasValue(item.description))
-        .map(
-          (item) => `
-            <li>
-              <b>${safe(item.title)}</b>
-              ${
-                hasValue(item.description) ? ` - ${safe(item.description)}` : ""
-              }
-            </li>
-          `
-        )
-        .join("");
-
-      const customSectionsHtml = customSections
-        .filter(
-          (section) => hasValue(section.heading) || hasValue(section.content)
-        )
-        .map(
-          (section) => `
-            <section>
-              <h2>${safe(section.heading || "Custom Section")}</h2>
-              <p>${safe(section.content)}</p>
-            </section>
-          `
-        )
-        .join("");
-
-      const summaryBullets = careerDetails.professionalSummary
-        .split(".")
-        .map((line) => line.trim())
+    const cleanList = (value = "") =>
+      value
+        .split(",")
+        .map((item) => item.trim())
         .filter(Boolean)
-        .map((line) => `<li>${safe(line)}.</li>`)
-        .join("");
+        .join(", ");
 
-      const singleColumn = !(isSidebar || isTwoColumn);
+    const profileLinks = [
+      personalDetails.linkedin
+        ? `LinkedIn: ${anchor("linkedin.com", personalDetails.linkedin)}`
+        : "",
+      personalDetails.github
+        ? `Github: ${anchor("github.com", personalDetails.github)}`
+        : "",
+      personalDetails.leetcode
+        ? `Leetcode: ${anchor("leetcode.com", personalDetails.leetcode)}`
+        : "",
+      personalDetails.portfolio
+        ? `Portfolio: ${anchor("portfolio", personalDetails.portfolio)}`
+        : "",
+      personalDetails.hackerrank
+        ? `HackerRank: ${anchor("hackerrank.com", personalDetails.hackerrank)}`
+        : "",
+      personalDetails.codechef
+        ? `CodeChef: ${anchor("codechef.com", personalDetails.codechef)}`
+        : "",
+      personalDetails.geeksforgeeks
+        ? `GeeksforGeeks: ${anchor(
+            "geeksforgeeks.org",
+            personalDetails.geeksforgeeks
+          )}`
+        : "",
+    ].filter(Boolean);
 
-      const html = `
+    const skillsHtml = [
+      ["Programming", cleanList(skills.programmingLanguages)],
+      ["Web Development", cleanList(skills.frontend)],
+      ["Backend", cleanList(skills.backend)],
+      ["Databases", cleanList(skills.databases)],
+      ["Tools", cleanList(skills.tools)],
+      ["Soft Skills", cleanList(skills.softSkills)],
+    ]
+      .filter(([, value]) => hasValue(value))
+      .map(([label, value]) => `<p><b>${label}:</b> ${safe(value)}</p>`)
+      .join("");
+
+    const educationHtml = education
+      .filter(hasAnyValue)
+      .map(
+        (edu) => `
+          <div class="item">
+            ${
+              hasValue(edu.degree)
+                ? `<h3>${safe(edu.degree)}</h3>`
+                : ""
+            }
+            ${
+              hasValue(edu.college)
+                ? `<p>${safe(edu.college)}</p>`
+                : ""
+            }
+            ${
+              hasValue(edu.university)
+                ? `<p>${safe(edu.university)}</p>`
+                : ""
+            }
+            ${
+              hasValue(edu.year)
+                ? `<p>(${safe(edu.year)})</p>`
+                : ""
+            }
+            ${
+              hasValue(edu.score)
+                ? `<p><b>Score:</b> ${safe(edu.score)}</p>`
+                : ""
+            }
+            ${
+              hasValue(edu.coursework)
+                ? `<p><b>Coursework:</b> ${safe(edu.coursework)}</p>`
+                : ""
+            }
+          </div>
+        `
+      )
+      .join("");
+
+    const experienceHtml = experience
+      .filter(hasAnyValue)
+      .map(
+        (item) => `
+          <div class="item">
+            ${
+              hasValue(item.company) || hasValue(item.role) || hasValue(item.duration)
+                ? `<div class="row">
+                    <div>
+                      ${
+                        hasValue(item.company) || hasValue(item.role)
+                          ? `<h3>${safe(item.company || item.role)}</h3>`
+                          : ""
+                      }
+                      ${
+                        hasValue(item.company) && hasValue(item.role)
+                          ? `<p><b>${safe(item.role)}</b></p>`
+                          : ""
+                      }
+                    </div>
+                    ${
+                      hasValue(item.duration)
+                        ? `<span>${safe(item.duration)}</span>`
+                        : ""
+                    }
+                  </div>`
+                : ""
+            }
+            ${
+              hasValue(item.description)
+                ? `<ul><li>${safe(item.description)}</li></ul>`
+                : ""
+            }
+          </div>
+        `
+      )
+      .join("");
+
+    const certificationsHtml = certifications
+      .filter(hasAnyValue)
+      .map(
+        (cert) => `
+          <li>
+            ${hasValue(cert.title) ? safe(cert.title) : ""}
+            ${hasValue(cert.issuer) ? ` - ${safe(cert.issuer)}` : ""}
+            ${hasValue(cert.year) ? ` (${safe(cert.year)})` : ""}
+            ${
+              hasValue(cert.link)
+                ? ` ${anchor("(Certificate Link)", cert.link)}`
+                : ""
+            }
+          </li>
+        `
+      )
+      .join("");
+
+    const projectsHtml = projects
+      .filter(hasAnyValue)
+      .map((project) => {
+        const links = [
+          anchor("(Live Link)", project.liveLink),
+          anchor("(Github Link)", project.githubLink),
+        ]
+          .filter(Boolean)
+          .join(" ");
+
+        const bullets = [project.description, project.features, project.challenges]
+          .filter(hasValue)
+          .map((point) => `<li>${safe(point)}</li>`)
+          .join("");
+
+        return `
+          <div class="project">
+            ${hasValue(project.title) ? `<h3>${safe(project.title)}</h3>` : ""}
+            ${links ? `<p class="project-links">${links}</p>` : ""}
+            ${
+              hasValue(project.techStack)
+                ? `<p class="tech"><b>Tech Stack:</b> ${safe(
+                    project.techStack
+                  )}</p>`
+                : ""
+            }
+            ${bullets ? `<ul>${bullets}</ul>` : ""}
+          </div>
+        `;
+      })
+      .join("");
+
+    const achievementsHtml = achievements
+      .filter(hasAnyValue)
+      .map(
+        (item) => `
+          <li>
+            ${hasValue(item.title) ? `<b>${safe(item.title)}</b>` : ""}
+            ${
+              hasValue(item.description)
+                ? `${hasValue(item.title) ? " - " : ""}${safe(
+                    item.description
+                  )}`
+                : ""
+            }
+          </li>
+        `
+      )
+      .join("");
+
+    const customSectionsHtml = customSections
+      .filter(hasAnyValue)
+      .map(
+        (section) => `
+          <section>
+            ${
+              hasValue(section.heading)
+                ? `<h2>${safe(section.heading)}</h2>`
+                : ""
+            }
+            ${
+              hasValue(section.content)
+                ? `<p>${safe(section.content)}</p>`
+                : ""
+            }
+          </section>
+        `
+      )
+      .join("");
+
+    const summaryBullets = careerDetails.professionalSummary
+      .split(".")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `<li>${safe(line)}.</li>`)
+      .join("");
+
+    const hasHeader =
+      hasValue(personalDetails.name) ||
+      hasValue(careerDetails.targetRole) ||
+      hasValue(personalDetails.phone) ||
+      hasValue(personalDetails.email) ||
+      hasValue(personalDetails.location) ||
+      profileLinks.length > 0;
+
+    const hasLeftColumn =
+      educationHtml ||
+      skillsHtml ||
+      experienceHtml ||
+      certificationsHtml ||
+      hasValue(languages) ||
+      hasValue(interests);
+
+    const hasRightColumn =
+      summaryBullets ||
+      hasValue(careerDetails.careerObjective) ||
+      projectsHtml ||
+      achievementsHtml ||
+      customSectionsHtml;
+
+    const shouldUseTwoColumns =
+      (isSidebar || isTwoColumn) && hasLeftColumn && hasRightColumn;
+
+    const html = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -696,8 +849,8 @@ ${interests}
 
     .layout {
       display: grid;
-      grid-template-columns: ${singleColumn ? "1fr" : "35% 65%"};
-      gap: ${singleColumn ? "12px" : "18px"};
+      grid-template-columns: ${shouldUseTwoColumns ? "35% 65%" : "1fr"};
+      gap: ${shouldUseTwoColumns ? "18px" : "12px"};
       align-items: start;
     }
 
@@ -755,21 +908,25 @@ ${interests}
       font-weight: 500;
     }
 
-    .block,
-    .project-block {
+    .item,
+    .project {
       margin-bottom: 10px;
       break-inside: avoid;
       page-break-inside: avoid;
     }
 
-    .inline-row {
+    .row {
       display: flex;
       justify-content: space-between;
       gap: 12px;
       align-items: flex-start;
     }
 
-    .inline-row span {
+    .row > div {
+      flex: 1;
+    }
+
+    .row span {
       flex-shrink: 0;
       font-size: 12px;
       color: #374151;
@@ -802,92 +959,131 @@ ${interests}
 
 <body>
   <main class="resume">
-    <header class="header">
-      <h1 class="name">${safe(personalDetails.name || "Your Name")}</h1>
-      <p class="role">${careerDetails.targetRole }</p>
+    ${
+      hasHeader
+        ? `<header class="header">
+            ${
+              hasValue(personalDetails.name)
+                ? `<h1 class="name">${safe(personalDetails.name)}</h1>`
+                : ""
+            }
+            ${
+              hasValue(careerDetails.targetRole)
+                ? `<p class="role">${safe(careerDetails.targetRole)}</p>`
+                : ""
+            }
+            ${
+              hasValue(personalDetails.phone) ||
+              hasValue(personalDetails.email) ||
+              hasValue(personalDetails.location)
+                ? `<div class="contact">
+                    ${
+                      hasValue(personalDetails.phone)
+                        ? `Mobile: ${safe(personalDetails.phone)}`
+                        : ""
+                    }
+                    ${
+                      hasValue(personalDetails.email)
+                        ? `${
+                            hasValue(personalDetails.phone) ? " | " : ""
+                          }Email: ${safe(personalDetails.email)}`
+                        : ""
+                    }
+                    ${
+                      hasValue(personalDetails.location)
+                        ? ` | ${safe(personalDetails.location)}`
+                        : ""
+                    }
+                  </div>`
+                : ""
+            }
+            ${
+              profileLinks.length
+                ? `<div class="profile-lines">${profileLinks.join("<br/>")}</div>`
+                : ""
+            }
+          </header>`
+        : ""
+    }
 
-      <div class="contact">
-        ${
-          hasValue(personalDetails.phone)
-            ? `Mobile: ${safe(personalDetails.phone)}`
-            : ""
-        }
-        ${
-          hasValue(personalDetails.email)
-            ? `${
-                hasValue(personalDetails.phone) ? " | " : ""
-              }Email: ${safe(personalDetails.email)}`
-            : ""
-        }
-        ${
-          hasValue(personalDetails.location)
-            ? ` | ${safe(personalDetails.location)}`
-            : ""
-        }
-      </div>
+    ${
+      !hasLeftColumn && !hasRightColumn
+        ? `<p>Start filling your details. Empty fields will not appear in the final resume.</p>`
+        : `<div class="layout">
+            ${
+              hasLeftColumn
+                ? `<div>
+                    ${
+                      educationHtml
+                        ? `<section><h2>Education</h2>${educationHtml}</section>`
+                        : ""
+                    }
+                    ${
+                      skillsHtml
+                        ? `<section><h2>Skills</h2>${skillsHtml}</section>`
+                        : ""
+                    }
+                    ${
+                      experienceHtml
+                        ? `<section><h2>Internships / Experience</h2>${experienceHtml}</section>`
+                        : ""
+                    }
+                    ${
+                      certificationsHtml
+                        ? `<section><h2>Certifications</h2><ul>${certificationsHtml}</ul></section>`
+                        : ""
+                    }
+                    ${
+                      hasValue(languages) || hasValue(interests)
+                        ? `<section><h2>Languages & Interests</h2>
+                            ${
+                              hasValue(languages)
+                                ? `<p><b>Languages:</b> ${safe(languages)}</p>`
+                                : ""
+                            }
+                            ${
+                              hasValue(interests)
+                                ? `<p><b>Interests:</b> ${safe(interests)}</p>`
+                                : ""
+                            }
+                          </section>`
+                        : ""
+                    }
+                  </div>`
+                : ""
+            }
 
-      ${
-        profileLinks.length
-          ? `<div class="profile-lines">${profileLinks.join("<br/>")}</div>`
-          : ""
-      }
-    </header>
-
-    <div class="layout">
-      <div class="left">
-        ${
-          educationHtml
-            ? `<section><h2>Education</h2>${educationHtml}</section>`
-            : ""
-        }
-        ${skillsHtml ? `<section><h2>Skills</h2>${skillsHtml}</section>` : ""}
-        ${
-          internshipHtml
-            ? `<section><h2>Internships</h2>${internshipHtml}</section>`
-            : ""
-        }
-        ${
-          certificationsHtml
-            ? `<section><h2>Certifications</h2><ul>${certificationsHtml}</ul></section>`
-            : ""
-        }
-        ${
-          hasValue(languages) || hasValue(interests)
-            ? `<section><h2>Languages & Interests</h2>
-                ${
-                  hasValue(languages)
-                    ? `<p><b>Languages:</b> ${safe(languages)}</p>`
-                    : ""
-                }
-                ${
-                  hasValue(interests)
-                    ? `<p><b>Interests:</b> ${safe(interests)}</p>`
-                    : ""
-                }
-              </section>`
-            : ""
-        }
-      </div>
-
-      <div class="right">
-        ${
-          summaryBullets
-            ? `<section><h2>Resume Summary</h2><ul>${summaryBullets}</ul></section>`
-            : ""
-        }
-        ${
-          projectHtml
-            ? `<section><h2>Projects</h2>${projectHtml}</section>`
-            : ""
-        }
-        ${
-          achievementsHtml
-            ? `<section><h2>Achievements</h2><ul>${achievementsHtml}</ul></section>`
-            : ""
-        }
-        ${customSectionsHtml}
-      </div>
-    </div>
+            ${
+              hasRightColumn
+                ? `<div>
+                    ${
+                      summaryBullets
+                        ? `<section><h2>Resume Summary</h2><ul>${summaryBullets}</ul></section>`
+                        : ""
+                    }
+                    ${
+                      hasValue(careerDetails.careerObjective)
+                        ? `<section><h2>Career Objective</h2><p>${safe(
+                            careerDetails.careerObjective
+                          )}</p></section>`
+                        : ""
+                    }
+                    ${
+                      projectsHtml
+                        ? `<section><h2>Projects</h2>${projectsHtml}</section>`
+                        : ""
+                    }
+                    ${
+                      achievementsHtml
+                        ? `<section><h2>Achievements</h2><ul>${achievementsHtml}</ul></section>`
+                        : ""
+                    }
+                    ${customSectionsHtml}
+                  </div>`
+                : ""
+            }
+          </div>`
+    }
   </main>
 
   <script>
@@ -899,27 +1095,27 @@ ${interests}
   </script>
 </body>
 </html>
-      `;
+    `;
 
-      const printWindow = window.open("", "_blank", "width=900,height=1000");
+    const printWindow = window.open("", "_blank", "width=900,height=1000");
 
-      if (!printWindow) {
-        setError("Popup blocked. Please allow popups and try again.");
-        setMessage("");
-        return;
-      }
-
-      printWindow.document.open();
-      printWindow.document.write(html);
-      printWindow.document.close();
-
-      setMessage("Print page opened. Chrome Save as PDF select cheyyi ✅");
-    } catch (err) {
-      console.error("PDF print error:", err);
-      setError(err.message || "PDF print failed");
+    if (!printWindow) {
+      setError("Popup blocked. Please allow popups and try again.");
       setMessage("");
+      return;
     }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    setMessage("Print page opened. Chrome Save as PDF select cheyyi ✅");
+  } catch (err) {
+    console.error("PDF print error:", err);
+    setError(err.message || "PDF print failed");
+    setMessage("");
   }
+}
 
   return (
     <div>
@@ -929,7 +1125,7 @@ ${interests}
         desc="Create a detailed resume with dynamic sections, clickable links, 50+ templates, professional preview and resume strength checklist."
         action={
           <Button onClick={saveResume}>
-            {loading ? "Saving..." : "Save Resume"}
+          {loading ? "Saving..." : editingResumeId ? "Update Resume" : "Save Resume"}
           </Button>
         }
       />

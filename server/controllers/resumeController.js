@@ -1,10 +1,16 @@
 import Resume from "../models/Resume.js";
 
+function getUserId(req) {
+  return req.user?._id || req.user?.id;
+}
+
 export const createResume = async (req, res) => {
   try {
+    const userId = getUserId(req);
+
     const resume = await Resume.create({
-      user: req.user._id,
       ...req.body,
+      user: userId,
     });
 
     res.status(201).json({
@@ -23,9 +29,13 @@ export const createResume = async (req, res) => {
 
 export const getMyResumes = async (req, res) => {
   try {
-    const resumes = await Resume.find({ user: req.user._id }).sort({
-      createdAt: -1,
-    });
+    const userId = getUserId(req);
+
+    const resumes = await Resume.find({ user: userId })
+      .sort({ updatedAt: -1 })
+      .select(
+        "title personalDetails.name personalDetails.email careerDetails.targetRole template resumeChecklist createdAt updatedAt"
+      );
 
     res.json({
       success: true,
@@ -41,11 +51,13 @@ export const getMyResumes = async (req, res) => {
   }
 };
 
-export const getSingleResume = async (req, res) => {
+export const getResumeById = async (req, res) => {
   try {
+    const userId = getUserId(req);
+
     const resume = await Resume.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: userId,
     });
 
     if (!resume) {
@@ -70,13 +82,18 @@ export const getSingleResume = async (req, res) => {
 
 export const updateResume = async (req, res) => {
   try {
+    const userId = getUserId(req);
+
     const resume = await Resume.findOneAndUpdate(
       {
         _id: req.params.id,
-        user: req.user._id,
+        user: userId,
       },
       req.body,
-      { new: true }
+      {
+        new: true,
+        runValidators: true,
+      }
     );
 
     if (!resume) {
@@ -102,9 +119,11 @@ export const updateResume = async (req, res) => {
 
 export const deleteResume = async (req, res) => {
   try {
+    const userId = getUserId(req);
+
     const resume = await Resume.findOneAndDelete({
       _id: req.params.id,
-      user: req.user._id,
+      user: userId,
     });
 
     if (!resume) {

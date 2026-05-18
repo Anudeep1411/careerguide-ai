@@ -1,38 +1,60 @@
 import { useEffect, useState } from "react";
-import { templates } from "../data/mockData";
 import { Button, Card, PageHeader } from "../components/Layout";
 import { apiRequest } from "../utils/api";
+import { load } from "../utils/storage";
 
-export function History() {
-  const [activeTab, setActiveTab] = useState("resumes");
+export function History({ setPage }) {
   const [resumes, setResumes] = useState([]);
-  const [analyses, setAnalyses] = useState([]);
-  const [jobMatches, setJobMatches] = useState([]);
-  const [interviews, setInterviews] = useState([]);
+  const [selectedResume, setSelectedResume] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [viewLoading, setViewLoading] = useState(false);
+  const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+function navigateTo(nextPage) {
+  localStorage.setItem("cg_current_page", nextPage);
 
-  async function fetchHistory() {
+  if (typeof setPage === "function") {
+    setPage(nextPage);
+  } else {
+    window.location.reload();
+  }
+}
+  async function fetchResumes() {
+    setLoading(true);
+    setError("");
+
     try {
-      setLoading(true);
-      setMessage("");
+      const data = await apiRequest("/resumes", {
+        method: "GET",
+      });
 
-      const [resumeData, analysisData, jobMatchData, interviewData] =
-        await Promise.all([
-          apiRequest("/resumes"),
-          apiRequest("/analysis"),
-          apiRequest("/job-match"),
-          apiRequest("/interviews"),
-        ]);
-
-      setResumes(resumeData.resumes || []);
-      setAnalyses(analysisData.analyses || []);
-      setJobMatches(jobMatchData.jobMatches || []);
-      setInterviews(interviewData.interviews || []);
-    } catch (error) {
-      setMessage(error.message || "Failed to fetch history");
+      setResumes(Array.isArray(data.resumes) ? data.resumes : []);
+    } catch (err) {
+      setError(err.message || "Failed to load resumes");
     } finally {
       setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchResumes();
+  }, []);
+
+  async function viewResume(id) {
+    setViewLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const data = await apiRequest(`/resumes/${id}`, {
+        method: "GET",
+      });
+
+      setSelectedResume(data.resume);
+    } catch (err) {
+      setError(err.message || "Failed to open resume");
+    } finally {
+      setViewLoading(false);
     }
   }
 
@@ -43,390 +65,508 @@ export function History() {
 
     if (!confirmDelete) return;
 
+    setError("");
+    setMessage("");
+
     try {
       await apiRequest(`/resumes/${id}`, {
         method: "DELETE",
       });
 
-      setResumes(resumes.filter((resume) => resume._id !== id));
       setMessage("Resume deleted successfully ✅");
-    } catch (error) {
-      setMessage(error.message || "Failed to delete resume");
+      setSelectedResume(null);
+      fetchResumes();
+    } catch (err) {
+      setError(err.message || "Failed to delete resume");
+    }
+  }
+  function buildResumeTextFromData(resume) {
+    const personal = resume.personalDetails || {};
+    const career = resume.careerDetails || {};
+    const skills = resume.skills || {};
+
+    const education = Array.isArray(resume.education) ? resume.education : [];
+    const projects = Array.isArray(resume.projects) ? resume.projects : [];
+    const experience = Array.isArray(resume.experience) ? resume.experience : [];
+    const certifications = Array.isArray(resume.certifications)
+      ? resume.certifications
+      : [];
+    const achievements = Array.isArray(resume.achievements)
+      ? resume.achievements
+      : [];
+
+    const skillText = [
+      ...(skills.programmingLanguages || []),
+      ...(skills.frontend || []),
+      ...(skills.backend || []),
+      ...(skills.databases || []),
+      ...(skills.tools || []),
+      ...(skills.softSkills || []),
+    ].join(", ");
+
+    const educationText = education
+      .map((edu) =>
+        [
+          edu.degree,
+          edu.college,
+          edu.university,
+          edu.year,
+          edu.score,
+          edu.coursework,
+        ]
+          .filter(Boolean)
+          .join(" ")
+      )
+      .join("\n");
+
+    const projectText = projects
+      .map((project) =>
+        [
+          project.title,
+          project.description,
+          project.techStack,
+          project.features,
+          project.challenges,
+          project.githubLink,
+          project.liveLink,
+        ]
+          .filter(Boolean)
+          .join(". ")
+      )
+      .join("\n");
+
+    const experienceText = experience
+      .map((item) =>
+        [item.company, item.role, item.duration, item.description]
+          .filter(Boolean)
+          .join(". ")
+      )
+      .join("\n");
+
+    const certificationText = certifications
+      .map((cert) =>
+        [cert.title, cert.issuer, cert.year, cert.link]
+          .filter(Boolean)
+          .join(" ")
+      )
+      .join("\n");
+
+    const achievementText = achievements
+      .map((item) => [item.title, item.description].filter(Boolean).join(" - "))
+      .join("\n");
+
+    return `
+Name: ${personal.name || ""}
+Email: ${personal.email || ""}
+Phone: ${personal.phone || ""}
+Location: ${personal.location || ""}
+GitHub: ${personal.github || ""}
+LinkedIn: ${personal.linkedin || ""}
+Portfolio: ${personal.portfolio || ""}
+LeetCode: ${personal.leetcode || ""}
+HackerRank: ${personal.hackerrank || ""}
+CodeChef: ${personal.codechef || ""}
+GeeksforGeeks: ${personal.geeksforgeeks || ""}
+
+Target Role: ${career.targetRole || ""}
+Experience Level: ${career.experienceLevel || ""}
+
+Professional Summary:
+${career.professionalSummary || ""}
+
+Career Objective:
+${career.careerObjective || ""}
+
+Skills:
+${skillText}
+
+Education:
+${educationText}
+
+Projects:
+${projectText}
+
+Experience:
+${experienceText}
+
+Certifications:
+${certificationText}
+
+Achievements:
+${achievementText}
+
+Languages:
+${Array.isArray(resume.languages) ? resume.languages.join(", ") : ""}
+
+Interests:
+${Array.isArray(resume.interests) ? resume.interests.join(", ") : ""}
+`;
+  }
+
+  async function editResume(id) {
+    setViewLoading(true);
+    setError("");
+    setMessage("");
+
+    try {
+      const data = await apiRequest(`/resumes/${id}`, {
+        method: "GET",
+      });
+
+      localStorage.setItem("cg_edit_resume_id", data.resume._id);
+      localStorage.setItem("cg_edit_resume_data", JSON.stringify(data.resume));
+
+    navigateTo("builder");
+    } catch (err) {
+      setError(err.message || "Failed to edit resume");
+    } finally {
+      setViewLoading(false);
     }
   }
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
+  async function analyzeSavedResume(id) {
+    setViewLoading(true);
+    setError("");
+    setMessage("");
 
-  const tabs = [
-    { id: "resumes", label: "Saved Resumes", count: resumes.length },
-    { id: "analyses", label: "Resume Analyses", count: analyses.length },
-    { id: "jobMatches", label: "Job Matches", count: jobMatches.length },
-    { id: "interviews", label: "Interviews", count: interviews.length },
-  ];
+    try {
+      const data = await apiRequest(`/resumes/${id}`, {
+        method: "GET",
+      });
 
+      const resumeText = buildResumeTextFromData(data.resume);
+
+      localStorage.setItem("cg_analyzer_resume_text", resumeText);
+      localStorage.setItem(
+        "cg_analyzer_target_role",
+        data.resume?.careerDetails?.targetRole || ""
+      );
+
+  navigateTo("analyzer");
+    } catch (err) {
+      setError(err.message || "Failed to analyze resume");
+    } finally {
+      setViewLoading(false);
+    }
+  }
   return (
     <div>
       <PageHeader
         eyebrow="History"
-        title="Your saved career activity"
-        desc="Review saved resumes, resume analyses, job matches and interview practice history from MongoDB."
+        title="Saved resumes"
+        desc="View and manage resumes saved from Resume Builder. Edit and download flow will be connected next."
         action={
-          <Button onClick={fetchHistory} variant="soft">
+          <Button onClick={fetchResumes} variant="soft">
             Refresh
           </Button>
         }
       />
 
       {message && (
-        <div className="mb-5 rounded-2xl bg-indigo-600/10 p-4 font-bold text-indigo-600 dark:text-cyan-300">
+        <div className="mb-5 rounded-2xl bg-emerald-500/10 p-4 font-bold text-emerald-500">
           {message}
         </div>
       )}
 
-      <div className="mb-6 grid gap-4 md:grid-cols-4">
-        <StatCard title="Saved Resumes" value={resumes.length} icon="📄" />
-        <StatCard title="Resume Analyses" value={analyses.length} icon="🔍" />
-        <StatCard title="Job Matches" value={jobMatches.length} icon="🎯" />
-        <StatCard title="Interviews" value={interviews.length} icon="🎤" />
-      </div>
-
-      <Card>
-        <div className="mb-5 flex flex-wrap gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`rounded-2xl px-4 py-2 text-sm font-black transition ${
-                activeTab === tab.id
-                  ? "bg-indigo-600 text-white"
-                  : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"
-              }`}
-            >
-              {tab.label} ({tab.count})
-            </button>
-          ))}
+      {error && (
+        <div className="mb-5 rounded-2xl bg-red-500/10 p-4 font-bold text-red-500">
+          {error}
         </div>
+      )}
 
-        {loading ? (
-          <div className="rounded-2xl bg-slate-50 p-8 text-center font-bold text-slate-500 dark:bg-white/5">
-            Loading history...
+      {loading ? (
+        <Card>
+          <p className="font-bold text-slate-500 dark:text-slate-400">
+            Loading saved resumes...
+          </p>
+        </Card>
+      ) : resumes.length === 0 ? (
+        <Card>
+          <div className="text-center">
+            <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-indigo-600/10 text-3xl">
+              📄
+            </div>
+
+            <h2 className="mt-4 text-2xl font-black">No resumes saved yet</h2>
+
+            <p className="mt-2 text-slate-500 dark:text-slate-400">
+              Go to Resume Builder, create your resume and click Save Resume.
+            </p>
           </div>
-        ) : (
-          <>
-            {activeTab === "resumes" && (
-              <ResumeHistory resumes={resumes} deleteResume={deleteResume} />
-            )}
+        </Card>
+      ) : (
+        <div className="grid gap-5 xl:grid-cols-[1fr_430px]">
+          <div className="grid gap-4">
+            {resumes.map((resume) => {
+              const name =
+                resume?.personalDetails?.name || "Untitled Candidate";
+              const email = resume?.personalDetails?.email || "";
+              const role =
+                resume?.careerDetails?.targetRole || "No target role";
+              const template =
+                resume?.template?.layout || resume?.template?.color
+                  ? `${resume?.template?.layout || "Template"} ${
+                      resume?.template?.color
+                        ? `- ${resume.template.color}`
+                        : ""
+                    }`
+                  : "Default Template";
 
-            {activeTab === "analyses" && (
-              <AnalysisHistory analyses={analyses} />
-            )}
+              return (
+                <Card key={resume._id}>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <h2 className="text-2xl font-black">
+                        {resume.title || `${role} Resume`}
+                      </h2>
 
-            {activeTab === "jobMatches" && (
-              <JobMatchHistory jobMatches={jobMatches} />
-            )}
+                      <p className="mt-1 font-bold text-slate-700 dark:text-slate-200">
+                        {name}
+                      </p>
 
-            {activeTab === "interviews" && (
-              <InterviewHistory interviews={interviews} />
-            )}
-          </>
-        )}
-      </Card>
+                      {email && (
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                          {email}
+                        </p>
+                      )}
+
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span className="rounded-full bg-indigo-600/10 px-3 py-1 text-xs font-black text-indigo-600 dark:text-cyan-300">
+                          {role}
+                        </span>
+
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                          {template}
+                        </span>
+
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-white/10 dark:text-slate-300">
+                          Updated {formatDate(resume.updatedAt)}
+                        </span>
+                      </div>
+                    </div>
+
+                  <div className="flex flex-wrap gap-2">
+  <Button onClick={() => viewResume(resume._id)}>
+    {viewLoading ? "Opening..." : "View"}
+  </Button>
+
+  <Button variant="soft" onClick={() => editResume(resume._id)}>
+    Edit
+  </Button>
+
+  <Button variant="soft" onClick={() => analyzeSavedResume(resume._id)}>
+    Analyze
+  </Button>
+
+  <Button variant="ghost" onClick={() => deleteResume(resume._id)}>
+    Delete
+  </Button>
+</div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+
+          <ResumeDetails resume={selectedResume} />
+        </div>
+      )}
     </div>
   );
 }
 
-function StatCard({ title, value, icon }) {
-  return (
-    <Card>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{title}</p>
-          <p className="mt-2 text-4xl font-black">{value}</p>
-        </div>
+function ResumeDetails({ resume }) {
+  if (!resume) {
+    return (
+      <Card className="h-fit">
+        <h2 className="text-2xl font-black">Resume details</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
+          Select a saved resume to preview its important details.
+        </p>
+      </Card>
+    );
+  }
 
-        <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-          {icon}
-        </div>
+  const personal = resume.personalDetails || {};
+  const career = resume.careerDetails || {};
+  const skills = resume.skills || {};
+  const projects = Array.isArray(resume.projects) ? resume.projects : [];
+  const education = Array.isArray(resume.education) ? resume.education : [];
+  const certifications = Array.isArray(resume.certifications)
+    ? resume.certifications
+    : [];
+
+  return (
+    <Card className="h-fit">
+      <h2 className="text-2xl font-black">
+        {resume.title || "Saved Resume"}
+      </h2>
+
+      <div className="mt-4 rounded-2xl bg-slate-50 p-4 dark:bg-white/5">
+        <p className="font-black">{personal.name || "No name"}</p>
+
+        {career.targetRole && (
+          <p className="mt-1 text-sm font-bold text-indigo-600 dark:text-cyan-300">
+            {career.targetRole}
+          </p>
+        )}
+
+        {personal.email && (
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+            {personal.email}
+          </p>
+        )}
       </div>
+
+      {career.professionalSummary && (
+        <DetailSection title="Summary">
+          <p>{career.professionalSummary}</p>
+        </DetailSection>
+      )}
+
+      <DetailSection title="Skills">
+        {renderSkillLine("Programming", skills.programmingLanguages)}
+        {renderSkillLine("Frontend", skills.frontend)}
+        {renderSkillLine("Backend", skills.backend)}
+        {renderSkillLine("Databases", skills.databases)}
+        {renderSkillLine("Tools", skills.tools)}
+      </DetailSection>
+
+      {education.length > 0 && (
+        <DetailSection title="Education">
+          {education.map((edu, index) => (
+            <div key={index} className="mb-3">
+              <p className="font-black">{edu.degree || "Education"}</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                {[edu.college, edu.university, edu.year, edu.score]
+                  .filter(Boolean)
+                  .join(" • ")}
+              </p>
+            </div>
+          ))}
+        </DetailSection>
+      )}
+
+      {projects.length > 0 && (
+        <DetailSection title="Projects">
+          {projects.map((project, index) => (
+            <div key={index} className="mb-3">
+              <p className="font-black">{project.title || "Project"}</p>
+
+              {project.techStack && (
+                <p className="text-sm font-bold text-indigo-600 dark:text-cyan-300">
+                  {project.techStack}
+                </p>
+              )}
+
+              {project.description && (
+                <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                  {project.description}
+                </p>
+              )}
+            </div>
+          ))}
+        </DetailSection>
+      )}
+
+      {certifications.length > 0 && (
+        <DetailSection title="Certifications">
+          {certifications.map((cert, index) => (
+            <p key={index}>
+              <b>{cert.title || "Certification"}</b>{" "}
+              {[cert.issuer, cert.year].filter(Boolean).join(" • ")}
+            </p>
+          ))}
+        </DetailSection>
+      )}
     </Card>
   );
 }
 
-function EmptyState({ title, desc }) {
+function DetailSection({ title, children }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-8 text-center dark:bg-white/5">
-      <p className="font-black">{title}</p>
-      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{desc}</p>
-    </div>
+    <section className="mt-5 border-t border-slate-200 pt-4 dark:border-white/10">
+      <h3 className="mb-2 text-sm font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        {title}
+      </h3>
+
+      <div className="space-y-2 text-sm leading-6 text-slate-700 dark:text-slate-300">
+        {children}
+      </div>
+    </section>
   );
 }
 
-function ResumeHistory({ resumes, deleteResume }) {
-  if (resumes.length === 0) {
-    return (
-      <EmptyState
-        title="No resumes saved yet"
-        desc="Go to Resume Builder and save your first resume."
-      />
-    );
-  }
+function renderSkillLine(label, items) {
+  if (!Array.isArray(items) || items.length === 0) return null;
 
   return (
-    <div className="grid gap-4">
-      {resumes.map((resume) => (
-        <div
-          key={resume._id}
-          className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-              📄
-            </div>
-
-            <div className="mr-auto">
-              <h3 className="text-lg font-black">
-                {resume.title || "Untitled Resume"}
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Role: {resume.targetRole || "Not specified"}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Template: {resume.template || "Minimal ATS"}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Saved:{" "}
-                {resume.createdAt
-                  ? new Date(resume.createdAt).toLocaleString()
-                  : "Recently"}
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button variant="soft">View</Button>
-              <Button variant="soft">Edit</Button>
-              <Button onClick={() => deleteResume(resume._id)} variant="outline">
-                Delete
-              </Button>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
+    <p>
+      <b>{label}:</b> {items.join(", ")}
+    </p>
   );
 }
 
-function AnalysisHistory({ analyses }) {
-  if (analyses.length === 0) {
-    return (
-      <EmptyState
-        title="No resume analyses yet"
-        desc="Go to Resume Analyzer and run your first analysis."
-      />
-    );
+function formatDate(date) {
+  if (!date) return "recently";
+
+  try {
+    return new Date(date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "recently";
   }
-
-  return (
-    <div className="grid gap-4">
-      {analyses.map((analysis) => (
-        <div
-          key={analysis._id}
-          className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-              🔍
-            </div>
-
-            <div className="mr-auto">
-              <h3 className="text-lg font-black">
-                Resume Analysis - {analysis.targetRole}
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                ATS Score: {analysis.atsScore}/100
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Skills Found: {analysis.skillsFound?.length || 0} | Missing:{" "}
-                {analysis.missingSkills?.length || 0}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Date:{" "}
-                {analysis.createdAt
-                  ? new Date(analysis.createdAt).toLocaleString()
-                  : "Recently"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-indigo-600/10 px-4 py-3 text-center">
-              <p className="text-2xl font-black text-indigo-600 dark:text-cyan-300">
-                {analysis.atsScore}
-              </p>
-              <p className="text-xs font-bold text-slate-500">ATS</p>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function JobMatchHistory({ jobMatches }) {
-  if (jobMatches.length === 0) {
-    return (
-      <EmptyState
-        title="No job matches yet"
-        desc="Go to Job Match Analyzer and compare your resume with a job description."
-      />
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
-      {jobMatches.map((job) => (
-        <div
-          key={job._id}
-          className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-              🎯
-            </div>
-
-            <div className="mr-auto">
-              <h3 className="text-lg font-black">
-                {job.companyName || "Company"} - {job.targetRole}
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Match Score: {job.matchScore}/100
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Shortlist Chance: {job.shortlistChance}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Matched Skills: {job.matchedSkills?.length || 0} | Missing:{" "}
-                {job.missingSkills?.length || 0}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Date:{" "}
-                {job.createdAt
-                  ? new Date(job.createdAt).toLocaleString()
-                  : "Recently"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-indigo-600/10 px-4 py-3 text-center">
-              <p className="text-2xl font-black text-indigo-600 dark:text-cyan-300">
-                {job.matchScore}
-              </p>
-              <p className="text-xs font-bold text-slate-500">MATCH</p>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function InterviewHistory({ interviews }) {
-  if (interviews.length === 0) {
-    return (
-      <EmptyState
-        title="No interviews yet"
-        desc="Go to Interview Practice and complete your first mock interview."
-      />
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
-      {interviews.map((interview) => (
-        <div
-          key={interview._id}
-          className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-              🎤
-            </div>
-
-            <div className="mr-auto">
-              <h3 className="text-lg font-black">
-                {interview.role} Interview
-              </h3>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Type: {interview.type} | Level: {interview.level}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Overall Score: {interview.overallScore}/10
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Status: {interview.status}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Date:{" "}
-                {interview.createdAt
-                  ? new Date(interview.createdAt).toLocaleString()
-                  : "Recently"}
-              </p>
-            </div>
-
-            <div className="rounded-2xl bg-indigo-600/10 px-4 py-3 text-center">
-              <p className="text-2xl font-black text-indigo-600 dark:text-cyan-300">
-                {interview.overallScore}
-              </p>
-              <p className="text-xs font-bold text-slate-500">SCORE</p>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 export function Templates() {
+  const templates = [
+    "Minimal ATS",
+    "Modern Developer",
+    "Corporate Blue",
+    "Sidebar Pro",
+    "Two Column",
+    "Frontend Specialist",
+    "Full Stack Pro",
+    "Product Company",
+    "Service Company",
+    "Elegant Fresher",
+  ];
+
   return (
     <div>
       <PageHeader
         eyebrow="Templates"
         title="Resume templates"
-        desc="Start with 10 polished templates. Future scope: 100 templates."
+        desc="Templates are available inside Resume Builder. Choose layout and color while building your resume."
       />
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {templates.map((template) => (
           <Card key={template}>
-            <div className="mb-4 grid h-56 place-items-center rounded-2xl bg-gradient-to-br from-indigo-100 to-cyan-100 dark:from-indigo-950 dark:to-cyan-950">
-              <div className="h-44 w-32 rounded-xl bg-white p-3 shadow-xl">
-                <div className="mb-2 h-3 w-20 rounded bg-slate-900" />
-                <div className="mb-2 h-2 w-full rounded bg-slate-200" />
-                <div className="mb-2 h-2 w-24 rounded bg-slate-200" />
-                <div className="mt-4 h-2 w-full rounded bg-indigo-200" />
-                <div className="mt-2 h-2 w-20 rounded bg-indigo-200" />
+            <div className="mb-4 h-32 rounded-2xl border border-slate-200 bg-white p-4 dark:border-white/10 dark:bg-white/5">
+              <div className="h-4 w-32 rounded bg-indigo-600" />
+              <div className="mt-4 h-2 w-full rounded bg-slate-200" />
+              <div className="mt-2 h-2 w-2/3 rounded bg-slate-200" />
+              <div className="mt-5 grid grid-cols-[35%_65%] gap-3">
+                <div className="space-y-2">
+                  <div className="h-2 rounded bg-slate-200" />
+                  <div className="h-2 rounded bg-slate-200" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-2 rounded bg-slate-200" />
+                  <div className="h-2 rounded bg-slate-200" />
+                  <div className="h-2 rounded bg-slate-200" />
+                </div>
               </div>
             </div>
 
-            <h3 className="text-xl font-black">{template}</h3>
-
+            <h2 className="text-xl font-black">{template}</h2>
             <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Best for freshers and entry-level job seekers.
+              Professional ATS-friendly resume layout.
             </p>
-
-            <Button className="mt-4 w-full">Use Template</Button>
           </Card>
         ))}
       </div>
@@ -435,36 +575,34 @@ export function Templates() {
 }
 
 export function Profile() {
+  const user = load("cg_user", null);
+
   return (
     <div>
       <PageHeader
         eyebrow="Profile"
-        title="Career profile"
-        desc="Complete your profile to improve resume suggestions and job match results."
+        title="Your profile"
+        desc="Your account details used across CareerGuide AI."
       />
 
       <Card>
-        <div className="grid gap-4 md:grid-cols-2">
-          {[
-            "Name",
-            "Email",
-            "Target Role",
-            "Experience Level",
-            "GitHub",
-            "LinkedIn",
-          ].map((field) => (
-            <label key={field}>
-              <span className="mb-2 block text-sm font-bold">{field}</span>
+        <div className="flex items-center gap-4">
+          <div className="grid h-16 w-16 place-items-center rounded-3xl bg-indigo-600 text-2xl font-black text-white">
+            {user?.name ? user.name.charAt(0).toUpperCase() : "U"}
+          </div>
 
-              <input
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
-                placeholder={field}
-              />
-            </label>
-          ))}
+          <div>
+            <h2 className="text-2xl font-black">{user?.name || "User"}</h2>
+            <p className="mt-1 text-slate-500 dark:text-slate-400">
+              {user?.email || "No email available"}
+            </p>
+            {user?.targetRole && (
+              <p className="mt-1 font-bold text-indigo-600 dark:text-cyan-300">
+                {user.targetRole}
+              </p>
+            )}
+          </div>
         </div>
-
-        <Button className="mt-5">Save Profile</Button>
       </Card>
     </div>
   );
@@ -475,24 +613,33 @@ export function Settings({ theme, setTheme }) {
     <div>
       <PageHeader
         eyebrow="Settings"
-        title="Preferences"
-        desc="Manage theme, AI response style and platform settings."
+        title="App settings"
+        desc="Manage appearance and project preferences."
       />
 
       <Card>
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-xl font-black">Theme</h3>
-
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              Switch between modern light and dark SaaS themes.
+            <h2 className="text-2xl font-black">Appearance</h2>
+            <p className="mt-1 text-slate-500 dark:text-slate-400">
+              Current theme: {theme === "dark" ? "Dark" : "Light"}
             </p>
           </div>
 
-          <Button onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
-            {theme === "dark" ? "Switch to Light" : "Switch to Dark"}
+          <Button
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+          >
+            Switch to {theme === "dark" ? "Light" : "Dark"}
           </Button>
         </div>
+      </Card>
+
+      <Card className="mt-5">
+        <h2 className="text-2xl font-black">Privacy</h2>
+        <p className="mt-2 leading-7 text-slate-600 dark:text-slate-300">
+          Resume data is private to the logged-in user. Backend routes are
+          protected with JWT authentication.
+        </p>
       </Card>
     </div>
   );
