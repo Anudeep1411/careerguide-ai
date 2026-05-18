@@ -47,8 +47,7 @@ export async function apiRequest(endpoint, options = {}) {
     return data;
   } catch (error) {
     throw new Error(
-      error.message ||
-        "Backend server not reachable. Please try again after a few seconds."
+      error.message || "Backend server not reachable. Please try again."
     );
   }
 }
