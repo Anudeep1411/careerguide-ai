@@ -7,57 +7,45 @@ const interviewSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
     role: {
       type: String,
-      required: true,
+      default: "Frontend Developer",
+      trim: true,
     },
-
     level: {
       type: String,
-      default: "Beginner",
+      default: "Fresher",
+      trim: true,
     },
-
     type: {
       type: String,
-      default: "Technical",
+      default: "technical",
+      trim: true,
     },
-
-    questions: [
-      {
-        question: String,
-        userAnswer: {
-          type: String,
-          default: "",
-        },
-        score: {
-          type: Number,
-          default: 0,
-        },
-        correctPoints: [String],
-        missingPoints: [String],
-        betterAnswer: {
-          type: String,
-          default: "",
-        },
-        followUpQuestion: {
-          type: String,
-          default: "",
-        },
-        weakArea: {
-          type: String,
-          default: "",
-        },
-      },
-    ],
-
-    overallScore: {
+    questionCount: {
+      type: Number,
+      default: 5,
+    },
+    questions: {
+      type: Array,
+      default: [],
+    },
+    answers: {
+      type: Array,
+      default: [],
+    },
+    feedback: {
+      type: Array,
+      default: [],
+    },
+    score: {
       type: Number,
       default: 0,
     },
-
-    weakAreas: [String],
-
+    weakAreas: {
+      type: [String],
+      default: [],
+    },
     status: {
       type: String,
       enum: ["started", "completed"],

@@ -1,395 +1,196 @@
-import { useState } from "react";
-import { Button, Card, PageHeader, ScoreCard } from "../components/Layout";
-import { apiRequest } from "../utils/api";
+import { useMemo, useState } from "react";
+import { Button, Card, PageHeader } from "../components/Layout";
+import { companyCategories, companyDirectory } from "../data/companyDirectory";
+
+function normalize(value = "") {
+  return String(value || "").toLowerCase();
+}
+
+function scoreCompany(company, skillText) {
+  const userSkills = normalize(skillText);
+  const matched = company.skills.filter((skill) => userSkills.includes(normalize(skill)));
+  const missing = company.skills.filter((skill) => !userSkills.includes(normalize(skill)));
+  const base = company.fresherFriendly.includes("High") ? 18 : company.fresherFriendly === "Medium" ? 10 : 5;
+  const score = Math.min(100, Math.round((matched.length / Math.max(company.skills.length, 1)) * 75 + base));
+  const chance = score >= 80 ? "High" : score >= 60 ? "Medium-High" : score >= 40 ? "Medium" : "Low-Medium";
+
+  return { score, chance, matched, missing };
+}
 
 export function JobOffers() {
-  const [resumeText, setResumeText] = useState(
-    "Skills: HTML CSS JavaScript React Tailwind Git GitHub DSA OOP Java SQL. Project: DSA Visualizer and CareerGuide AI full stack project with MongoDB Express React Node.js JWT authentication."
-  );
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("All");
+  const [difficulty, setDifficulty] = useState("All");
+  const [selectedCompany, setSelectedCompany] = useState(null);
+  const [skillText, setSkillText] = useState("React, JavaScript, Node.js, MongoDB, SQL, Git");
 
-  const [keyword, setKeyword] = useState("Developer");
-  const [location, setLocation] = useState("");
-  const [jobs, setJobs] = useState([]);
-  const [companies, setCompanies] = useState([]);
-  const [activeTab, setActiveTab] = useState("companies");
-  const [loadingJobs, setLoadingJobs] = useState(false);
-  const [loadingCompanies, setLoadingCompanies] = useState(false);
-  const [error, setError] = useState("");
+  const filteredCompanies = useMemo(() => {
+    return companyDirectory.filter((company) => {
+      const matchesQuery = !query || normalize(company.name).includes(normalize(query)) || normalize(company.category).includes(normalize(query)) || company.roles.some((role) => normalize(role).includes(normalize(query)));
+      const matchesCategory = category === "All" || company.category === category;
+      const matchesDifficulty = difficulty === "All" || company.difficulty === difficulty;
+      return matchesQuery && matchesCategory && matchesDifficulty;
+    });
+  }, [query, category, difficulty]);
 
-  async function checkCompanyReadiness() {
-    setLoadingCompanies(true);
-    setError("");
-
-    try {
-      const data = await apiRequest("/job-offers/company-readiness", {
-        method: "POST",
-        body: JSON.stringify({ resumeText }),
-      });
-
-      setCompanies(data.companies || []);
-      setActiveTab("companies");
-    } catch (err) {
-      setError(err.message || "Failed to calculate company readiness");
-    } finally {
-      setLoadingCompanies(false);
-    }
-  }
-
-  async function fetchJobOffers() {
-    setLoadingJobs(true);
-    setError("");
-
-    try {
-      const data = await apiRequest("/job-offers/offers", {
-        method: "POST",
-        body: JSON.stringify({
-          keyword,
-          location,
-          resumeText,
-          limit: 8,
-        }),
-      });
-
-      setJobs(data.jobs || []);
-      setActiveTab("jobs");
-    } catch (err) {
-      setError(err.message || "Failed to fetch job offers");
-    } finally {
-      setLoadingJobs(false);
-    }
-  }
-
-  const bestCompany = companies[0];
+  const readiness = selectedCompany ? scoreCompany(selectedCompany, skillText) : null;
+  const difficulties = ["All", "Easy-Medium", "Medium", "Medium-High", "High", "Very High"];
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="Real Job Offers"
-        title="Find real jobs and check company readiness"
-        desc="Compare your resume skills with company expectations and real job listings. This gives an estimate, not a guarantee."
-        action={
-          <div className="flex flex-wrap gap-3">
-            <Button onClick={checkCompanyReadiness}>
-              {loadingCompanies ? "Checking..." : "Check Companies"}
-            </Button>
-            <Button onClick={fetchJobOffers} variant="soft">
-              {loadingJobs ? "Fetching..." : "Fetch Jobs"}
-            </Button>
-          </div>
-        }
+        eyebrow="Company Directory"
+        title="Job Offers & Company Readiness"
+        desc="Explore 100 fresher-focused companies, understand their selection process and check your readiness."
       />
 
-      {error && (
-        <div className="mb-5 rounded-2xl bg-red-500/10 p-4 font-bold text-red-500">
-          {error}
+      <Card>
+        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr]">
+          <label className="block">
+            <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">Search company or role</span>
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search TCS, Zoho, React, Analyst..."
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">Category</span>
+            <select value={category} onChange={(event) => setCategory(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none dark:border-white/10 dark:bg-slate-950">
+              {companyCategories.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">Difficulty</span>
+            <select value={difficulty} onChange={(event) => setDifficulty(event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none dark:border-white/10 dark:bg-slate-950">
+              {difficulties.map((item) => <option key={item}>{item}</option>)}
+            </select>
+          </label>
         </div>
-      )}
+      </Card>
 
-      <div className="grid gap-5 xl:grid-cols-[430px_1fr]">
-        <div className="space-y-5">
-          <Card>
-            <h2 className="text-2xl font-black">Your Resume Skills</h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              Paste your resume text or skills. We will compare it with company
-              expectations and real job descriptions.
-            </p>
-
-            <textarea
-              value={resumeText}
-              onChange={(e) => setResumeText(e.target.value)}
-              className="mt-4 h-64 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-              placeholder="Paste resume text / skills here..."
-            />
-
-            <Button onClick={checkCompanyReadiness} className="mt-4 w-full">
-              {loadingCompanies ? "Checking..." : "Check Company Readiness"}
-            </Button>
-          </Card>
-
-          <Card>
-            <h2 className="text-2xl font-black">Real Job Search</h2>
-
-            <label className="mt-4 block">
-              <span className="mb-2 block text-sm font-bold">Keyword</span>
-              <input
-                value={keyword}
-                onChange={(e) => setKeyword(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-                placeholder="Developer, React, Node, Java..."
-              />
-            </label>
-
-            <label className="mt-4 block">
-              <span className="mb-2 block text-sm font-bold">
-                Location optional
-              </span>
-              <input
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-                placeholder="Remote, India, Germany..."
-              />
-            </label>
-
-            <Button onClick={fetchJobOffers} className="mt-4 w-full">
-              {loadingJobs ? "Fetching Jobs..." : "Fetch Real Job Offers"}
-            </Button>
-          </Card>
-
-          <Card>
-            <h2 className="text-xl font-black">Important Note</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Company readiness and shortlist chance are only estimates based on
-              skills, common company expectations and job descriptions. Actual
-              shortlisting depends on company, recruiter, competition and role.
-            </p>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-3">
-            <ScoreCard
-              title="Best Company Match"
-              value={bestCompany?.readinessScore || 0}
-              label={bestCompany?.company || "Check now"}
-              tone={
-                (bestCompany?.readinessScore || 0) >= 80
-                  ? "success"
-                  : (bestCompany?.readinessScore || 0) >= 60
-                  ? "warning"
-                  : "danger"
-              }
-              trend="Estimate"
-            />
-
-            <ScoreCard
-              title="Real Jobs Found"
-              value={Math.min(jobs.length * 10, 100)}
-              label={`${jobs.length} jobs`}
-              tone={jobs.length > 0 ? "success" : "warning"}
-              trend="Live"
-            />
-
-            <ScoreCard
-              title="Companies Checked"
-              value={Math.min(companies.length * 15, 100)}
-              label={`${companies.length} companies`}
-              tone={companies.length > 0 ? "success" : "warning"}
-              trend="Ready"
-            />
-          </div>
-
-          <Card>
-            <div className="mb-5 flex flex-wrap gap-2">
-              <button
-                onClick={() => setActiveTab("companies")}
-                className={`rounded-2xl px-4 py-2 text-sm font-black ${
-                  activeTab === "companies"
-                    ? "bg-indigo-600 text-white"
-                    : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"
-                }`}
-              >
-                Company Readiness ({companies.length})
-              </button>
-
-              <button
-                onClick={() => setActiveTab("jobs")}
-                className={`rounded-2xl px-4 py-2 text-sm font-black ${
-                  activeTab === "jobs"
-                    ? "bg-indigo-600 text-white"
-                    : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200"
-                }`}
-              >
-                Real Jobs ({jobs.length})
-              </button>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {filteredCompanies.map((company) => (
+          <button
+            key={company.id}
+            type="button"
+            onClick={() => setSelectedCompany(company)}
+            className="rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-xl dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-xl font-black">{company.name}</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{company.category}</p>
+              </div>
+              <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-black text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300">#{company.rank}</span>
             </div>
 
-            {activeTab === "companies" && (
-              <CompanyReadinessList companies={companies} />
-            )}
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge label={`Fresher: ${company.fresherFriendly}`} />
+              <Badge label={`Difficulty: ${company.difficulty}`} />
+            </div>
 
-            {activeTab === "jobs" && <JobOffersList jobs={jobs} />}
-          </Card>
+            <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">Best for: {company.focus}</p>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Roles: {company.roles.slice(0, 3).join(", ")}</p>
+          </button>
+        ))}
+      </div>
+
+      {!filteredCompanies.length && (
+        <Card>
+          <p className="text-center font-bold text-slate-500 dark:text-slate-300">No companies found. Try another search or filter.</p>
+        </Card>
+      )}
+
+      {selectedCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-auto rounded-3xl bg-white p-6 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white">
+            <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-black uppercase tracking-wide text-indigo-600 dark:text-cyan-300">{selectedCompany.category}</p>
+                <h2 className="text-3xl font-black">{selectedCompany.name}</h2>
+                <p className="mt-2 max-w-3xl text-sm text-slate-500 dark:text-slate-300">{selectedCompany.overview}</p>
+              </div>
+              <Button variant="soft" onClick={() => setSelectedCompany(null)}>Close</Button>
+            </div>
+
+            <div className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+              <div className="space-y-5">
+                <DetailSection title="Common Fresher Roles" items={selectedCompany.roles} />
+                <DetailSection title="Required Skills" items={selectedCompany.skills} />
+                <DetailSection title="Resume Keywords" items={selectedCompany.resumeKeywords} />
+                <DetailSection title="Selection Process" items={selectedCompany.rounds} numbered />
+                <DetailSection title="Common Interview Questions" items={selectedCompany.questions} numbered />
+                <DetailSection title="Projects to Build" items={selectedCompany.projects} numbered />
+                <DetailSection title="30-Day Preparation Roadmap" items={selectedCompany.roadmap} numbered />
+              </div>
+
+              <Card>
+                <h3 className="text-xl font-black">Company Readiness Checker</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Enter your current skills to estimate how ready you are for {selectedCompany.name}.</p>
+
+                <textarea
+                  value={skillText}
+                  onChange={(event) => setSkillText(event.target.value)}
+                  rows={5}
+                  className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
+                />
+
+                <div className="mt-5 rounded-3xl bg-slate-50 p-5 dark:bg-white/5">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-bold text-slate-500 dark:text-slate-300">Readiness Score</p>
+                      <p className="text-4xl font-black text-indigo-600 dark:text-cyan-300">{readiness.score}%</p>
+                    </div>
+                    <Badge label={`Chance: ${readiness.chance}`} />
+                  </div>
+
+                  <MiniList title="Matched Skills" items={readiness.matched} empty="No direct matches yet." tone="green" />
+                  <MiniList title="Missing Skills" items={readiness.missing} empty="You cover most required skills." tone="amber" />
+
+                  <div className="mt-4 rounded-2xl border border-indigo-100 bg-indigo-50 p-4 text-sm font-semibold text-indigo-800 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-200">
+                    Resume tip: Add 2-3 company-relevant keywords and one project that proves your role skills before applying.
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function Badge({ label }) {
+  return <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700 dark:bg-white/10 dark:text-slate-200">{label}</span>;
+}
+
+function DetailSection({ title, items, numbered = false }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 dark:border-white/10 dark:bg-white/5">
+      <h3 className="font-black">{title}</h3>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {items.map((item, index) => numbered ? (
+          <div key={item} className="w-full rounded-2xl bg-white p-3 text-sm font-semibold text-slate-700 dark:bg-slate-950 dark:text-slate-200">
+            {index + 1}. {item}
+          </div>
+        ) : <Badge key={item} label={item} />)}
       </div>
     </div>
   );
 }
 
-function CompanyReadinessList({ companies }) {
-  if (companies.length === 0) {
-    return (
-      <EmptyState
-        icon="🏢"
-        title="No company readiness yet"
-        desc="Click Check Company Readiness to compare your skills with TCS, Accenture, Wipro, Google, Amazon and more."
-      />
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
-      {companies.map((company) => (
-        <div
-          key={company.company}
-          className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-start">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-              🏢
-            </div>
-
-            <div className="mr-auto">
-              <h3 className="text-xl font-black">{company.company}</h3>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Type: {company.type} | Chance: {company.chanceEstimate}
-              </p>
-
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400"
-                  style={{ width: `${company.readinessScore}%` }}
-                />
-              </div>
-
-              <p className="mt-2 text-sm font-bold">
-                Readiness Score: {company.readinessScore}/100
-              </p>
-
-              <MiniList title="Matched Skills" items={company.matchedSkills} />
-              <MiniList title="Missing Skills" items={company.missingSkills} />
-              <MiniList
-                title="Expected Questions"
-                items={company.expectedQuestions}
-              />
-              <MiniList
-                title="Preparation Plan"
-                items={company.preparationPlan}
-              />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function JobOffersList({ jobs }) {
-  if (jobs.length === 0) {
-    return (
-      <EmptyState
-        icon="💼"
-        title="No real jobs loaded yet"
-        desc="Click Fetch Real Job Offers to load current job listings from a public job source."
-      />
-    );
-  }
-
-  return (
-    <div className="grid gap-4">
-      {jobs.map((job, index) => (
-        <div
-          key={`${job.title}-${job.company}-${index}`}
-          className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5"
-        >
-          <div className="flex flex-col gap-4 md:flex-row md:items-start">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-              💼
-            </div>
-
-            <div className="mr-auto">
-              <h3 className="text-xl font-black">{job.title}</h3>
-
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {job.company} | {job.location}
-              </p>
-
-              <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                {job.description || "No description available"}
-              </p>
-
-              <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-white/10">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-cyan-400"
-                  style={{ width: `${job.matchScore}%` }}
-                />
-              </div>
-
-              <p className="mt-2 text-sm font-bold">
-                Match Score: {job.matchScore}/100 | Chance:{" "}
-                {job.chanceEstimate}
-              </p>
-
-              <MiniList title="Required Skills" items={job.requiredSkills} />
-              <MiniList title="Matched Skills" items={job.matchedSkills} />
-              <MiniList title="Missing Skills" items={job.missingSkills} />
-              <MiniList
-                title="Expected Interview Questions"
-                items={job.expectedInterviewQuestions}
-              />
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {job.url && (
-                  <a
-                    href={job.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-2xl bg-indigo-600 px-4 py-2 text-sm font-black text-white"
-                  >
-                    Apply / View Job
-                  </a>
-                )}
-
-                <button className="rounded-2xl bg-slate-200 px-4 py-2 text-sm font-black text-slate-800 dark:bg-white/10 dark:text-white">
-                  Analyze Match
-                </button>
-
-                <button className="rounded-2xl bg-slate-200 px-4 py-2 text-sm font-black text-slate-800 dark:bg-white/10 dark:text-white">
-                  Practice Interview
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MiniList({ title, items }) {
-  if (!items || items.length === 0) return null;
+function MiniList({ title, items, empty, tone }) {
+  const toneClass = tone === "green" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300";
 
   return (
     <div className="mt-4">
-      <p className="text-sm font-black text-indigo-600 dark:text-cyan-300">
-        {title}
-      </p>
-
+      <p className="text-sm font-black">{title}</p>
       <div className="mt-2 flex flex-wrap gap-2">
-        {items.slice(0, 8).map((item) => (
-          <span
-            key={item}
-            className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 shadow-sm dark:bg-slate-950 dark:text-slate-200"
-          >
-            {item}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function EmptyState({ icon, title, desc }) {
-  return (
-    <div className="grid min-h-[420px] place-items-center text-center">
-      <div>
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-indigo-600/10 text-3xl">
-          {icon}
-        </div>
-        <h2 className="mt-4 text-2xl font-black">{title}</h2>
-        <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
-          {desc}
-        </p>
+        {items.length ? items.map((item) => <span key={item} className={`rounded-full px-3 py-1 text-xs font-bold ${toneClass}`}>{item}</span>) : <p className="text-xs text-slate-500 dark:text-slate-300">{empty}</p>}
       </div>
     </div>
   );

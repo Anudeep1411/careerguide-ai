@@ -1,362 +1,283 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, Card, PageHeader } from "../components/Layout";
-import { roles } from "../data/mockData";
 import { apiRequest } from "../utils/api";
 
-export function InterviewPractice() {
-  const [setup, setSetup] = useState({
-    role: "Frontend Developer",
-    level: "Intermediate",
-    type: "Technical",
-    questionCount: 5,
-  });
+const QUESTION_BANK = {
+  technical: [
+    "Explain your strongest project architecture and your contribution.",
+    "What is the difference between var, let and const in JavaScript?",
+    "How do REST APIs work in a full-stack application?",
+    "Explain authentication flow using JWT.",
+    "How do you optimize a React application?",
+    "What is the difference between SQL and NoSQL databases?",
+    "Explain OOPs concepts with examples.",
+    "How do you debug a production issue?",
+    "What is Git and how do you use branches?",
+    "Explain one data structure you use frequently.",
+    "How would you design a simple login system?",
+    "What is the difference between frontend and backend validation?",
+    "Explain promises and async/await.",
+    "How do you handle errors in APIs?",
+    "What makes your resume suitable for this role?",
+  ],
+  hr: [
+    "Tell me about yourself.",
+    "Why should we hire you?",
+    "Why do you want this role?",
+    "What are your strengths and weaknesses?",
+    "Tell me about a challenge you faced and how you solved it.",
+    "Where do you see yourself in 3 years?",
+    "Why do you want to join our company?",
+    "How do you handle feedback?",
+    "Describe a time you worked in a team.",
+    "Are you comfortable learning new technologies quickly?",
+  ],
+  behavioral: [
+    "Tell me about a time you took ownership of a task.",
+    "Describe a situation where you had to learn something quickly.",
+    "How do you manage deadlines?",
+    "Tell me about a mistake you made and what you learned.",
+    "How do you handle conflict in a team?",
+    "Give an example of problem solving from your project.",
+    "How do you prioritize tasks when multiple things are pending?",
+    "Tell me about a time you improved something.",
+    "How do you communicate technical issues to non-technical people?",
+    "What motivates you as a fresher?",
+  ],
+};
 
-  const [interview, setInterview] = useState(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [answer, setAnswer] = useState("");
-  const [feedback, setFeedback] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+function buildQuestions(type, count, role) {
+  const base = type === "mixed"
+    ? [...QUESTION_BANK.technical, ...QUESTION_BANK.hr, ...QUESTION_BANK.behavioral]
+    : QUESTION_BANK[type] || QUESTION_BANK.technical;
 
-  function updateSetup(key, value) {
-    setSetup({ ...setup, [key]: value });
+  return base.slice(0, Number(count || 5)).map((question, index) => ({
+    id: index + 1,
+    question: question.replace("this role", role || "this role"),
+    answer: "",
+    feedback: null,
+  }));
+}
+
+function evaluateAnswer(answer = "", question = "") {
+  const text = answer.trim();
+  let score = 3;
+  const strengths = [];
+  const improvements = [];
+
+  if (text.length > 80) {
+    score += 2;
+    strengths.push("Answer has enough detail.");
+  } else {
+    improvements.push("Add more details and avoid one-line answers.");
   }
 
-  async function startInterview() {
-    setLoading(true);
+  if (/project|built|implemented|created|developed|designed/i.test(text)) {
+    score += 2;
+    strengths.push("You connected your answer with practical work.");
+  } else {
+    improvements.push("Add one project or practical example.");
+  }
+
+  if (/result|impact|improved|reduced|increased|learned/i.test(text)) {
+    score += 1;
+    strengths.push("You mentioned result or learning.");
+  } else {
+    improvements.push("Mention outcome, impact or what you learned.");
+  }
+
+  if (/team|communication|collabor/i.test(text)) score += 1;
+  if (/because|therefore|for example|first|second/i.test(text)) score += 1;
+
+  score = Math.min(10, score);
+
+  return {
+    score,
+    strengths: strengths.length ? strengths : ["You attempted the answer clearly."],
+    improvements: improvements.length ? improvements : ["Make it more concise and structured using Situation, Task, Action, Result."],
+    betterAnswer: `A stronger answer should explain the concept, connect it to your project, mention your exact contribution and end with the result. For this question: "${question}" prepare a 45-60 second answer with one project example.`,
+  };
+}
+
+export function InterviewPractice() {
+  const [form, setForm] = useState({ role: "Frontend Developer", level: "Fresher", type: "technical", count: 5 });
+  const [questions, setQuestions] = useState([]);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const overallScore = useMemo(() => {
+    const scored = questions.filter((item) => item.feedback);
+    if (!scored.length) return 0;
+    return Math.round((scored.reduce((sum, item) => sum + item.feedback.score, 0) / (scored.length * 10)) * 100);
+  }, [questions]);
+
+  function update(key, value) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function generateQuestions() {
+    setMessage("");
     setError("");
-    setFeedback(null);
-    setAnswer("");
-    setCurrentIndex(0);
+    setLoading(true);
+
+    const localQuestions = buildQuestions(form.type, form.count, form.role);
 
     try {
       const data = await apiRequest("/interviews/start", {
         method: "POST",
-        body: JSON.stringify(setup),
-      });
-
-      setInterview(data.interview);
-    } catch (err) {
-      setError(err.message || "Failed to start interview");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function submitAnswer() {
-    if (!answer.trim()) {
-      setError("Please type your answer before submitting");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const data = await apiRequest("/interviews/answer", {
-        method: "POST",
         body: JSON.stringify({
-          interviewId: interview._id,
-          questionIndex: currentIndex,
-          answer,
+          role: form.role,
+          level: form.level,
+          type: form.type,
+          questionCount: Number(form.count),
         }),
       });
 
-      setFeedback(data.feedback);
-      setInterview(data.interview);
-    } catch (err) {
-      setError(err.message || "Failed to submit answer");
+      const serverQuestions = data?.interview?.questions || data?.questions;
+      setQuestions((serverQuestions?.length ? serverQuestions : localQuestions).map((item, index) => ({
+        id: item.id || index + 1,
+        question: item.question || item,
+        answer: item.answer || "",
+        feedback: item.feedback || null,
+      })));
+    } catch {
+      setQuestions(localQuestions);
     } finally {
       setLoading(false);
     }
   }
 
-  function nextQuestion() {
-    if (!interview) return;
+  function updateAnswer(id, answer) {
+    setQuestions((prev) => prev.map((item) => item.id === id ? { ...item, answer } : item));
+  }
 
-    if (currentIndex < interview.questions.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setAnswer(interview.questions[currentIndex + 1]?.userAnswer || "");
-      setFeedback(null);
-      setError("");
+  function getFeedback(id) {
+    setQuestions((prev) => prev.map((item) => {
+      if (item.id !== id) return item;
+      return { ...item, feedback: evaluateAnswer(item.answer, item.question) };
+    }));
+  }
+
+  async function saveInterview() {
+    setError("");
+    setMessage("");
+
+    try {
+      await apiRequest("/interviews/answer", {
+        method: "POST",
+        body: JSON.stringify({
+          role: form.role,
+          level: form.level,
+          type: form.type,
+          questions,
+          score: overallScore,
+          weakAreas: buildWeakAreas(questions),
+        }),
+      });
+      setMessage("Interview practice saved to history.");
+    } catch (err) {
+      setError(err.message || "Could not save interview. You can still practice locally.");
     }
   }
 
-  function restartInterview() {
-    setInterview(null);
-    setCurrentIndex(0);
-    setAnswer("");
-    setFeedback(null);
-    setError("");
-  }
-
-  const currentQuestion = interview?.questions?.[currentIndex];
-  const isLastQuestion = interview
-    ? currentIndex === interview.questions.length - 1
-    : false;
-
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="AI Interview Practice"
-        title="Practice interviews with AI feedback"
-        desc="Choose role, level and type. Answer questions and get score, missing points, better answer and weak area."
-        action={
-          interview ? (
-            <Button onClick={restartInterview} variant="soft">
-              New Interview
-            </Button>
-          ) : (
-            <Button onClick={startInterview}>
-              {loading ? "Starting..." : "Start Interview"}
-            </Button>
-          )
-        }
+        eyebrow="Interview Practice"
+        title="Practice Like a Real Interview"
+        desc="Generate fresher-friendly technical, HR and behavioral questions, write answers and get structured feedback."
       />
 
-      {error && (
-        <div className="mb-5 rounded-2xl bg-red-500/10 p-4 font-bold text-red-500">
-          {error}
-        </div>
-      )}
-
-      {!interview ? (
-        <StartInterview
-          setup={setup}
-          updateSetup={updateSetup}
-          startInterview={startInterview}
-          loading={loading}
-        />
-      ) : (
-        <div className="grid gap-5 xl:grid-cols-[1fr_430px]">
-          <Card>
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <span className="rounded-full bg-indigo-600/10 px-3 py-1 text-sm font-bold text-indigo-600 dark:text-cyan-300">
-                Question {currentIndex + 1} of {interview.questions.length}
-              </span>
-
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-bold text-slate-600 dark:bg-white/10 dark:text-slate-300">
-                Overall Score: {interview.overallScore || 0}/10
-              </span>
-            </div>
-
-            <h2 className="text-3xl font-black leading-tight">
-              {currentQuestion?.question}
-            </h2>
-
-            <textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer here..."
-              className="mt-5 h-72 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-            />
-
-            <div className="mt-5 flex flex-wrap gap-3">
-              <Button onClick={submitAnswer}>
-                {loading ? "Checking..." : "Submit Answer"}
-              </Button>
-
-              {!isLastQuestion && (
-                <Button onClick={nextQuestion} variant="soft">
-                  Next Question
-                </Button>
-              )}
-
-              <Button onClick={restartInterview} variant="soft">
-                End Interview
-              </Button>
-            </div>
-          </Card>
-
-          <Card>
-            <h2 className="text-2xl font-black">AI Feedback</h2>
-
-            {!feedback ? (
-              <div className="mt-5 rounded-2xl bg-slate-50 p-5 text-center dark:bg-white/5">
-                <div className="mx-auto grid h-14 w-14 place-items-center rounded-3xl bg-indigo-600/10 text-2xl">
-                  🎤
-                </div>
-                <p className="mt-3 font-bold">No feedback yet</p>
-                <p className="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                  Type your answer and click Submit Answer to get AI-style
-                  feedback.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-5 space-y-4">
-                <div className="rounded-2xl bg-emerald-500/10 p-4">
-                  <p className="text-xl font-black text-emerald-500">
-                    Score: {feedback.score}/10
-                  </p>
-                  <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
-                    Weak Area: {feedback.weakArea}
-                  </p>
-                </div>
-
-                <FeedbackBox
-                  title="Correct Points"
-                  items={feedback.correctPoints || []}
-                  empty="No correct points detected"
-                />
-
-                <FeedbackBox
-                  title="Missing Points"
-                  items={feedback.missingPoints || []}
-                  empty="No missing points detected"
-                />
-
-                <div className="rounded-2xl bg-indigo-600/10 p-4">
-                  <h3 className="font-black text-indigo-600 dark:text-cyan-300">
-                    Better Answer
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    {feedback.betterAnswer}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl bg-amber-500/10 p-4">
-                  <h3 className="font-black text-amber-500">
-                    Follow-up Question
-                  </h3>
-                  <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                    {feedback.followUpQuestion}
-                  </p>
-                </div>
-              </div>
-            )}
-          </Card>
-
-          <Card className="xl:col-span-2">
-            <h2 className="text-2xl font-black">Interview Progress</h2>
-
-            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {interview.questions.map((q, index) => (
-                <button
-                  key={`${q.question}-${index}`}
-                  onClick={() => {
-                    setCurrentIndex(index);
-                    setAnswer(q.userAnswer || "");
-                    setFeedback(q.score ? q : null);
-                    setError("");
-                  }}
-                  className={`rounded-2xl border p-4 text-left transition ${
-                    index === currentIndex
-                      ? "border-indigo-500 bg-indigo-600/10"
-                      : "border-slate-200 bg-slate-50 dark:border-white/10 dark:bg-white/5"
-                  }`}
-                >
-                  <p className="font-black">Q{index + 1}</p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                    {q.userAnswer ? `Score: ${q.score}/10` : "Not answered"}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function StartInterview({ setup, updateSetup, startInterview, loading }) {
-  return (
-    <div className="grid gap-5 xl:grid-cols-[1fr_420px]">
-      <Card>
-        <h2 className="text-2xl font-black">Interview Setup</h2>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <Select
-            label="Role"
-            value={setup.role}
-            onChange={(value) => updateSetup("role", value)}
-            options={roles}
-          />
-
-          <Select
-            label="Level"
-            value={setup.level}
-            onChange={(value) => updateSetup("level", value)}
-            options={["Beginner", "Intermediate", "Advanced"]}
-          />
-
-          <Select
-            label="Type"
-            value={setup.type}
-            onChange={(value) => updateSetup("type", value)}
-            options={[
-              "Technical",
-              "HR",
-              "Resume Based",
-              "Job Description Based",
-              "Mixed",
-            ]}
-          />
-
-          <Select
-            label="Questions"
-            value={setup.questionCount}
-            onChange={(value) => updateSetup("questionCount", Number(value))}
-            options={[5, 10, 15]}
-          />
-        </div>
-
-        <Button onClick={startInterview} className="mt-5">
-          {loading ? "Starting..." : "Start AI Interview"}
-        </Button>
-      </Card>
+      {message && <Notice tone="success">{message}</Notice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
       <Card>
-        <h2 className="text-2xl font-black">What feedback includes</h2>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Field label="Target Role">
+            <input value={form.role} onChange={(event) => update("role", event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-slate-950" />
+          </Field>
+          <Field label="Level">
+            <select value={form.level} onChange={(event) => update("level", event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-slate-950"><option>Fresher</option><option>Intermediate</option></select>
+          </Field>
+          <Field label="Interview Type">
+            <select value={form.type} onChange={(event) => update("type", event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-slate-950"><option value="technical">Technical</option><option value="hr">HR</option><option value="behavioral">Behavioral</option><option value="mixed">Mixed</option></select>
+          </Field>
+          <Field label="Questions">
+            <select value={form.count} onChange={(event) => update("count", event.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-slate-950"><option value="5">5</option><option value="10">10</option><option value="15">15</option></select>
+          </Field>
+        </div>
 
-        <ul className="mt-4 space-y-3 text-slate-600 dark:text-slate-300">
-          <li>• Score out of 10</li>
-          <li>• Correct points</li>
-          <li>• Missing points</li>
-          <li>• Better answer format</li>
-          <li>• Follow-up question</li>
-          <li>• Weak area detection</li>
-        </ul>
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Button onClick={generateQuestions}>{loading ? "Generating..." : "Generate Questions"}</Button>
+          {questions.length > 0 && <Button variant="soft" onClick={saveInterview}>Save Practice</Button>}
+        </div>
       </Card>
-    </div>
-  );
-}
 
-function Select({ label, value, onChange, options }) {
-  return (
-    <label>
-      <span className="mb-2 block text-sm font-bold">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-      >
-        {options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
+      {questions.length > 0 && (
+        <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
+          <div className="space-y-4">
+            {questions.map((item) => (
+              <Card key={item.id}>
+                <div className="flex items-start gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-black text-white">{item.id}</span>
+                  <div className="flex-1">
+                    <h3 className="font-black">{item.question}</h3>
+                    <textarea value={item.answer} onChange={(event) => updateAnswer(item.id, event.target.value)} rows={5} placeholder="Write your answer here..." className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5" />
+                    <div className="mt-3 flex gap-2"><Button variant="soft" onClick={() => getFeedback(item.id)}>Get Feedback</Button></div>
 
-function FeedbackBox({ title, items, empty }) {
-  return (
-    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-white/5">
-      <h3 className="font-black">{title}</h3>
+                    {item.feedback && <Feedback feedback={item.feedback} />}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
 
-      {items.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-          {empty}
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          {items.map((item) => (
-            <li key={item}>• {item}</li>
-          ))}
-        </ul>
+          <Card>
+            <p className="text-sm font-bold text-slate-500 dark:text-slate-300">Overall Score</p>
+            <p className="mt-2 text-5xl font-black text-indigo-600 dark:text-cyan-300">{overallScore}%</p>
+            <p className="mt-3 text-sm text-slate-500 dark:text-slate-300">Answer all questions and get feedback to improve your score.</p>
+            <Mini title="Weak Areas" items={buildWeakAreas(questions)} />
+            <Mini title="Next Steps" items={["Add project examples", "Use STAR format", "Keep answers under 60 seconds", "Practice one mock daily"]} />
+          </Card>
+        </div>
       )}
     </div>
   );
+}
+
+function buildWeakAreas(questions) {
+  const weak = [];
+  questions.forEach((item) => {
+    if (!item.feedback) return;
+    if (item.feedback.score < 7) weak.push("Answer depth");
+    if (!/project|built|implemented|created/i.test(item.answer || "")) weak.push("Project examples");
+    if ((item.answer || "").length < 80) weak.push("Detailed explanation");
+  });
+  return [...new Set(weak)].slice(0, 5);
+}
+
+function Field({ label, children }) {
+  return <label className="block"><span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">{label}</span>{children}</label>;
+}
+
+function Feedback({ feedback }) {
+  return (
+    <div className="mt-4 rounded-3xl border border-indigo-100 bg-indigo-50 p-4 dark:border-indigo-500/20 dark:bg-indigo-500/10">
+      <p className="font-black text-indigo-700 dark:text-cyan-300">Score: {feedback.score}/10</p>
+      <Mini title="Good" items={feedback.strengths} tone="green" />
+      <Mini title="Improve" items={feedback.improvements} tone="amber" />
+      <p className="mt-3 text-sm font-semibold text-slate-700 dark:text-slate-200"><b>Better answer direction:</b> {feedback.betterAnswer}</p>
+    </div>
+  );
+}
+
+function Mini({ title, items = [], tone = "slate" }) {
+  const color = tone === "green" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300" : tone === "amber" ? "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300" : "bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200";
+  return <div className="mt-4"><p className="text-sm font-black">{title}</p><div className="mt-2 flex flex-wrap gap-2">{items.length ? items.map((item) => <span key={item} className={`rounded-full px-3 py-1 text-xs font-bold ${color}`}>{item}</span>) : <span className={`rounded-full px-3 py-1 text-xs font-bold ${color}`}>No weak areas yet</span>}</div></div>;
+}
+
+function Notice({ tone, children }) {
+  const styles = tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300" : "border-red-200 bg-red-50 text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300";
+  return <div className={`rounded-3xl border p-4 text-sm font-bold ${styles}`}>{children}</div>;
 }

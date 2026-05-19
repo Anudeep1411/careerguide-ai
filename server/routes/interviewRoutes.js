@@ -1,17 +1,17 @@
 import express from "express";
 import {
   startInterview,
-  submitAnswer,
-  getMyInterviews,
-  getSingleInterview,
+  answerInterview,
+  getInterviews,
+  getInterviewById,
 } from "../controllers/interviewController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 
 router.post("/start", protect, startInterview);
-router.post("/answer", protect, submitAnswer);
-router.get("/", protect, getMyInterviews);
-router.get("/:id", protect, getSingleInterview);
+router.post("/answer", protect, answerInterview);
+router.get("/", protect, getInterviews);
+router.get("/:id", protect, getInterviewById);
 
 export default router;

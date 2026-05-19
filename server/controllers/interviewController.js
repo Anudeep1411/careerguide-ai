@@ -1,181 +1,82 @@
 import Interview from "../models/Interview.js";
 
-const questionBank = {
-  "Frontend Developer": [
-    "Explain the difference between HTML, CSS and JavaScript.",
-    "What is React and why do we use it?",
-    "Explain useState and useEffect in React.",
-    "What is responsive design?",
-    "How do you optimize frontend performance?",
+const QUESTION_BANK = {
+  technical: [
+    "Explain your strongest project architecture and your contribution.",
+    "What is the difference between var, let and const in JavaScript?",
+    "How do REST APIs work in a full-stack application?",
+    "Explain authentication flow using JWT.",
+    "How do you optimize a React application?",
+    "What is the difference between SQL and NoSQL databases?",
+    "Explain OOPs concepts with examples.",
+    "How do you debug a production issue?",
+    "What is Git and how do you use branches?",
+    "Explain one data structure you use frequently.",
+    "How would you design a simple login system?",
+    "What is the difference between frontend and backend validation?",
+    "Explain promises and async/await.",
+    "How do you handle errors in APIs?",
+    "What makes your resume suitable for this role?",
   ],
-
-  "React Developer": [
-    "What are components in React?",
-    "Explain props vs state.",
-    "What is useEffect used for?",
-    "What are keys in React lists?",
-    "How do you manage forms in React?",
-  ],
-
-  "Full Stack Developer": [
-    "Explain frontend and backend communication.",
-    "What is REST API?",
-    "How does JWT authentication work?",
-    "What is MongoDB and why use it?",
-    "Explain your full-stack project architecture.",
-  ],
-
-  "MERN Stack Developer": [
-    "What is the MERN stack?",
-    "How does Express handle routes?",
-    "How do React and Node.js communicate?",
-    "What is Mongoose?",
-    "How do you protect backend routes?",
-  ],
-
-  "Java Developer": [
-    "Explain OOP concepts in Java.",
-    "What is inheritance?",
-    "What is exception handling?",
-    "Difference between ArrayList and LinkedList?",
-    "What is Spring Boot?",
-  ],
-
-  "DSA Interview": [
-    "What is time complexity?",
-    "Explain stack and queue.",
-    "What is binary search?",
-    "Explain BFS and DFS.",
-    "What is dynamic programming?",
-  ],
-
-  "HR Interview": [
+  hr: [
     "Tell me about yourself.",
     "Why should we hire you?",
+    "Why do you want this role?",
     "What are your strengths and weaknesses?",
-    "Tell me about your project.",
-    "Where do you see yourself in 5 years?",
+    "Tell me about a challenge you faced and how you solved it.",
+    "Where do you see yourself in 3 years?",
+    "Why do you want to join our company?",
+    "How do you handle feedback?",
+    "Describe a time you worked in a team.",
+    "Are you comfortable learning new technologies quickly?",
+  ],
+  behavioral: [
+    "Tell me about a time you took ownership of a task.",
+    "Describe a situation where you had to learn something quickly.",
+    "How do you manage deadlines?",
+    "Tell me about a mistake you made and what you learned.",
+    "How do you handle conflict in a team?",
+    "Give an example of problem solving from your project.",
+    "How do you prioritize tasks when multiple things are pending?",
+    "Tell me about a time you improved something.",
+    "How do you communicate technical issues to non-technical people?",
+    "What motivates you as a fresher?",
   ],
 };
 
-function getQuestions(role, count = 5) {
-  const questions = questionBank[role] || questionBank["Frontend Developer"];
+function buildQuestions(type = "technical", count = 5, role = "this role") {
+  const base = type === "mixed"
+    ? [...QUESTION_BANK.technical, ...QUESTION_BANK.hr, ...QUESTION_BANK.behavioral]
+    : QUESTION_BANK[type] || QUESTION_BANK.technical;
 
-  return questions.slice(0, count).map((question) => ({
-    question,
-    userAnswer: "",
-    score: 0,
-    correctPoints: [],
-    missingPoints: [],
-    betterAnswer: "",
-    followUpQuestion: "",
-    weakArea: "",
+  return base.slice(0, Number(count || 5)).map((question, index) => ({
+    id: index + 1,
+    question: question.replace("this role", role || "this role"),
+    answer: "",
+    feedback: null,
   }));
-}
-
-function evaluateAnswer(question, answer) {
-  const text = answer.toLowerCase();
-
-  let score = 4;
-  const correctPoints = [];
-  const missingPoints = [];
-  let weakArea = "Concept clarity";
-
-  if (answer.length > 80) {
-    score += 2;
-    correctPoints.push("Answer has enough explanation.");
-  } else {
-    missingPoints.push("Answer is too short. Add more explanation.");
-  }
-
-  if (
-    text.includes("example") ||
-    text.includes("project") ||
-    text.includes("real")
-  ) {
-    score += 1;
-    correctPoints.push("Answer includes example or real-world connection.");
-  } else {
-    missingPoints.push("Add one practical example.");
-  }
-
-  if (
-    text.includes("because") ||
-    text.includes("used") ||
-    text.includes("helps")
-  ) {
-    score += 1;
-    correctPoints.push("Answer explains why the concept is useful.");
-  } else {
-    missingPoints.push("Explain why this concept is used.");
-  }
-
-  if (
-    text.includes("time") ||
-    text.includes("complexity") ||
-    text.includes("performance")
-  ) {
-    score += 1;
-    correctPoints.push("Answer mentions performance or complexity.");
-  } else {
-    missingPoints.push("Mention performance, complexity or impact if applicable.");
-  }
-
-  if (text.includes("react") || text.includes("api") || text.includes("data")) {
-    score += 1;
-    correctPoints.push("Answer uses relevant technical terms.");
-  }
-
-  score = Math.min(score, 10);
-
-  if (score >= 8) {
-    weakArea = "Minor improvement needed";
-  } else if (score >= 6) {
-    weakArea = "Need stronger examples";
-  } else {
-    weakArea = "Basic concept explanation";
-  }
-
-  const betterAnswer = `A better answer should define the concept, explain why it is used, give one real example, and mention important points related to the question: "${question}"`;
-
-  const followUpQuestion = `Can you explain this concept with an example from your own project?`;
-
-  return {
-    score,
-    correctPoints,
-    missingPoints,
-    betterAnswer,
-    followUpQuestion,
-    weakArea,
-  };
 }
 
 export const startInterview = async (req, res) => {
   try {
-    const { role, level, type, questionCount } = req.body;
-
-    if (!role) {
-      return res.status(400).json({
-        success: false,
-        message: "Role is required",
-      });
-    }
-
-    const questions = getQuestions(role, questionCount || 5);
+    const { role = "Frontend Developer", level = "Fresher", type = "technical", questionCount = 5 } = req.body;
+    const questions = buildQuestions(type, questionCount, role);
 
     const interview = await Interview.create({
       user: req.user._id,
       role,
       level,
       type,
+      questionCount: Number(questionCount || 5),
       questions,
       status: "started",
     });
 
     res.status(201).json({
       success: true,
-      message: "Interview started successfully",
+      message: "Interview questions generated",
       interview,
+      questions,
     });
   } catch (error) {
     res.status(500).json({
@@ -186,134 +87,76 @@ export const startInterview = async (req, res) => {
   }
 };
 
-export const submitAnswer = async (req, res) => {
+export const answerInterview = async (req, res) => {
   try {
-    const { interviewId, questionIndex, answer } = req.body;
+    const { interviewId, role, level, type, questions = [], answers = [], feedback = [], score = 0, weakAreas = [] } = req.body;
 
-    if (!interviewId || questionIndex === undefined || !answer) {
-      return res.status(400).json({
-        success: false,
-        message: "Interview ID, question index and answer are required",
-      });
+    let interview = null;
+
+    if (interviewId) {
+      interview = await Interview.findOne({ _id: interviewId, user: req.user._id });
     }
-
-    const interview = await Interview.findOne({
-      _id: interviewId,
-      user: req.user._id,
-    });
 
     if (!interview) {
-      return res.status(404).json({
-        success: false,
-        message: "Interview not found",
-      });
+      interview = new Interview({ user: req.user._id });
     }
 
-    const questionItem = interview.questions[questionIndex];
-
-    if (!questionItem) {
-      return res.status(404).json({
-        success: false,
-        message: "Question not found",
-      });
-    }
-
-    const feedback = evaluateAnswer(questionItem.question, answer);
-
-    interview.questions[questionIndex].userAnswer = answer;
-    interview.questions[questionIndex].score = feedback.score;
-    interview.questions[questionIndex].correctPoints = feedback.correctPoints;
-    interview.questions[questionIndex].missingPoints = feedback.missingPoints;
-    interview.questions[questionIndex].betterAnswer = feedback.betterAnswer;
-    interview.questions[questionIndex].followUpQuestion = feedback.followUpQuestion;
-    interview.questions[questionIndex].weakArea = feedback.weakArea;
-
-    const answeredQuestions = interview.questions.filter(
-      (q) => q.userAnswer && q.userAnswer.trim() !== ""
-    );
-
-    if (answeredQuestions.length > 0) {
-      const totalScore = answeredQuestions.reduce(
-        (sum, q) => sum + q.score,
-        0
-      );
-
-      interview.overallScore = Math.round(
-        totalScore / answeredQuestions.length
-      );
-    }
-
-    interview.weakAreas = [
-      ...new Set(
-        interview.questions
-          .map((q) => q.weakArea)
-          .filter((area) => area && area.trim() !== "")
-      ),
-    ];
-
-    if (answeredQuestions.length === interview.questions.length) {
-      interview.status = "completed";
-    }
+    interview.role = role || interview.role || "Frontend Developer";
+    interview.level = level || interview.level || "Fresher";
+    interview.type = type || interview.type || "technical";
+    interview.questions = questions;
+    interview.answers = answers;
+    interview.feedback = feedback;
+    interview.score = Number(score || 0);
+    interview.weakAreas = weakAreas;
+    interview.status = "completed";
 
     await interview.save();
 
     res.json({
       success: true,
-      message: "Answer evaluated successfully",
-      feedback: interview.questions[questionIndex],
+      message: "Interview practice saved",
       interview,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Failed to submit answer",
+      message: "Failed to save interview",
       error: error.message,
     });
   }
 };
 
-export const getMyInterviews = async (req, res) => {
+export const getInterviews = async (req, res) => {
   try {
-    const interviews = await Interview.find({ user: req.user._id }).sort({
-      createdAt: -1,
-    });
+    const interviews = await Interview.find({ user: req.user._id }).sort({ createdAt: -1 }).limit(30);
 
     res.json({
       success: true,
-      count: interviews.length,
       interviews,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Failed to fetch interviews",
+      message: "Failed to load interviews",
       error: error.message,
     });
   }
 };
 
-export const getSingleInterview = async (req, res) => {
+export const getInterviewById = async (req, res) => {
   try {
-    const interview = await Interview.findOne({
-      _id: req.params.id,
-      user: req.user._id,
-    });
+    const interview = await Interview.findOne({ _id: req.params.id, user: req.user._id });
 
     if (!interview) {
-      return res.status(404).json({
-        success: false,
-        message: "Interview not found",
-      });
+      return res.status(404).json({ success: false, message: "Interview not found" });
     }
 
-    res.json({
-      success: true,
-      interview,
-    });
+    res.json({ success: true, interview });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Failed to fetch interview",
+      message: "Failed to load interview",
       error: error.message,
     });
   }
