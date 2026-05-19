@@ -306,7 +306,7 @@ export function ResumeBuilder({ setPage }) {
   }
 
   function improveSummary() {
-    const role = resume.careerDetails.targetRole || "Frontend Developer";
+    const role = resume.careerDetails.targetRole || "";
     const improved = `Detail-oriented ${role} with strong fundamentals, hands-on project experience and the ability to build responsive, user-friendly and maintainable applications. Passionate about solving real-world problems and continuously improving through practical development.`;
     update("careerDetails.professionalSummary", improved);
     setMessage("Professional summary improved ✅");
@@ -665,7 +665,9 @@ function ResumePreview({ resume }) {
     <div className={`mx-auto min-h-[720px] w-full max-w-[620px] bg-white p-5 text-slate-900 shadow-lg ${fontSize}`}>
       <header className="border-b pb-3" style={{ borderColor: color }}>
         <h1 className="text-2xl font-black tracking-tight" style={{ color }}>{resume.personalDetails.name || "Your Name"}</h1>
-        <p className="mt-1 font-bold text-slate-700">{resume.careerDetails.targetRole || "Target Role"}</p>
+        {resume.careerDetails.targetRole?.trim() && (
+        <p className="mt-1 font-bold text-slate-700">{resume.careerDetails.targetRole}</p>
+      )}
         <p className="mt-2 text-xs text-slate-500">{[resume.personalDetails.email, resume.personalDetails.phone, resume.personalDetails.location].filter(Boolean).join(" | ")}</p>
         <div className="mt-2 flex flex-wrap gap-3 text-xs">
           {linkButton("LinkedIn", resume.personalDetails.linkedin)}
@@ -810,7 +812,7 @@ function buildPrintHtml(resume) {
   return `<!doctype html><html><head><title>${clean(resume.personalDetails.name || "Resume")}</title><style>
     body{font-family:Arial,sans-serif;background:#f1f5f9;margin:0;padding:24px;color:#111827}.page{max-width:850px;margin:0 auto;background:#fff;padding:36px;box-shadow:0 20px 60px rgba(15,23,42,.16)}h1{margin:0;color:${color};font-size:32px;letter-spacing:-.04em}.role{font-weight:700;color:#334155;margin-top:4px}.contact{font-size:12px;color:#475569;margin-top:10px;line-height:1.7}.links a{color:${color};font-weight:700;text-decoration:none;margin-right:10px;font-size:12px}section{margin-top:19px;break-inside:avoid}h2{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:${color};border-bottom:1px solid #e5e7eb;padding-bottom:6px;margin:0 0 10px}h3{font-size:15px;margin:0 0 4px}p,li{font-size:12.5px;line-height:1.55;color:#334155}ul{margin:6px 0 0 18px;padding:0}.note{max-width:850px;margin:18px auto;text-align:center;font-size:12px;color:#64748b}@media print{body{background:#fff;padding:0}.page{box-shadow:none}.note{display:none}}
   </style></head><body><div class="page">
-    <header><h1>${clean(resume.personalDetails.name || "Your Name")}</h1><div class="role">${clean(resume.careerDetails.targetRole || "Target Role")}</div><div class="contact">${[resume.personalDetails.email,resume.personalDetails.phone,resume.personalDetails.location].filter(Boolean).map(clean).join(" | ")}</div><div class="links">${[href("LinkedIn",resume.personalDetails.linkedin),href("GitHub",resume.personalDetails.github),href("Portfolio",resume.personalDetails.portfolio),href("LeetCode",resume.personalDetails.leetcode)].filter(Boolean).join("")}</div></header>
+    <header><h1>${clean(resume.personalDetails.name || "Your Name")}</h1>${resume.careerDetails.targetRole?.trim() ? `<div class="role">${clean(resume.careerDetails.targetRole)}</div>` : ""}<div class="contact">${[resume.personalDetails.email,resume.personalDetails.phone,resume.personalDetails.location].filter(Boolean).map(clean).join(" | ")}</div><div class="links">${[href("LinkedIn",resume.personalDetails.linkedin),href("GitHub",resume.personalDetails.github),href("Portfolio",resume.personalDetails.portfolio),href("LeetCode",resume.personalDetails.leetcode)].filter(Boolean).join("")}</div></header>
     ${section("summary") ? block(titles.summary, resume.careerDetails.professionalSummary ? `<p>${clean(resume.careerDetails.professionalSummary)}</p>` : "") : ""}
     ${section("objective") ? block(titles.objective, resume.careerDetails.careerObjective ? `<p>${clean(resume.careerDetails.careerObjective)}</p>` : "") : ""}
     ${section("skills") ? block(titles.skills, `<p><b>Programming:</b> ${clean(join(resume.skills.programmingLanguages))}</p><p><b>Frontend:</b> ${clean(join(resume.skills.frontend))}</p><p><b>Backend:</b> ${clean(join(resume.skills.backend))}</p><p><b>Databases:</b> ${clean(join(resume.skills.databases))}</p><p><b>Tools:</b> ${clean(join(resume.skills.tools))}</p><p><b>Soft Skills:</b> ${clean(join(resume.skills.softSkills))}</p>`) : ""}
@@ -824,4 +826,3 @@ function buildPrintHtml(resume) {
     ${section("customSections") ? resume.customSections.filter(hasAnyValue).map((item) => block(item.heading || titles.customSections, item.content ? `<p>${clean(item.content)}</p>` : "")).join("") : ""}
   </div><div class="note">Press Ctrl + P → Save as PDF</div></body></html>`;
 }
-

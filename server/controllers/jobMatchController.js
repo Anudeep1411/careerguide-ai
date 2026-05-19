@@ -277,6 +277,7 @@ async function extractPdfText(file) {
   const parser = new PDFParse({ data: file.buffer });
   const parsed = await parser.getText();
   await parser.destroy();
+
   return parsed.text || "";
 }
 
@@ -373,5 +374,3 @@ export const getJobMatches = async (req, res) => {
     });
   }
 };
-
-
