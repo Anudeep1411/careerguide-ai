@@ -196,8 +196,8 @@ export function JobMatch() {
   return (
     <div>
       <PageHeader
-        eyebrow="Phase 3A"
-        title="Resume + Job Notification Match"
+        eyebrow="AI Job Match"
+        title="Resume + Job Match Analyzer"
         desc="Compare saved resume, uploaded resume PDF or manual resume text against a job notification PDF or job description."
       />
 
