@@ -90,18 +90,31 @@ The platform currently uses a contact-admin reset flow to avoid domain/email-del
 4. User logs in with temporary password.
 5. User is forced to create a new password.
 
-## Screenshot Checklist
+## Project Screenshots
 
-Add screenshots to the `screenshots/` folder and update the paths below:
+### Login / Signup
+![Login and Signup](screenshots/01-login-signup.png)
 
-- `screenshots/login.png`
-- `screenshots/dashboard.png`
-- `screenshots/resume-builder.png`
-- `screenshots/job-match.png`
-- `screenshots/company-directory.png`
-- `screenshots/interview.png`
-- `screenshots/history.png`
+### Dashboard
+![Dashboard](screenshots/02-dashboard.png)
 
+### Resume Builder
+![Resume Builder](screenshots/03-resume-builder.png)
+
+### Resume Analyzer
+![Resume Analyzer](screenshots/04-resume-analyzer.png)
+
+### Job Match
+![Job Match](screenshots/05-job-match.png)
+
+### Company Directory
+![Company Directory](screenshots/06-job-offers.png)
+
+### Interview Practice
+![Interview Practice](screenshots/07-interview-practice.png)
+
+### History
+![History](screenshots/08-history.png)
 ## API Route Overview
 
 - `POST /api/auth/signup`
@@ -136,3 +149,4 @@ Add screenshots to the `screenshots/` folder and update the paths below:
 ## Author
 
 Built by Anudeep as a fresher-focused full-stack career guidance platform.
+
