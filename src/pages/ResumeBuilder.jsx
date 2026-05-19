@@ -170,36 +170,72 @@ export function ResumeBuilder({ setPage }) {
   const [activeEditor, setActiveEditor] = useState("details");
   const [draftLoaded, setDraftLoaded] = useState(false);
 
-  useEffect(() => {
-    const editData = localStorage.getItem("cg_edit_resume_data");
+  function loadResumeForEditing(rawResume, explicitId) {
+    if (!rawResume) return false;
+
+    const normalized = normalizeResume(rawResume);
+    const resumeId = explicitId || rawResume._id || rawResume.id || null;
+
+    setResume(normalized);
+    setEditingResumeId(resumeId);
+    localStorage.setItem(RESUME_DRAFT_KEY, JSON.stringify(normalized));
+    setMessage("Saved resume loaded for editing ✅");
+    return true;
+  }
+
+  function consumeEditResumeFromStorage() {
+    const editData =
+      localStorage.getItem("cg_edit_resume_data") ||
+      localStorage.getItem("cg_edit_resume");
     const editId = localStorage.getItem("cg_edit_resume_id");
 
-    if (editData) {
-      try {
-        const parsed = JSON.parse(editData);
-        setResume(normalizeResume(parsed));
-        setEditingResumeId(editId || parsed._id || null);
-        setMessage("Saved resume loaded for editing ✅");
-        localStorage.removeItem("cg_edit_resume_data");
-        localStorage.removeItem("cg_edit_resume_id");
-        setDraftLoaded(true);
-        return;
-      } catch (err) {
-        setError("Failed to load resume for editing");
-      }
-    }
+    if (!editData) return false;
 
-    const savedDraft = localStorage.getItem(RESUME_DRAFT_KEY);
-    if (savedDraft) {
-      try {
-        setResume(normalizeResume(JSON.parse(savedDraft)));
-        setMessage("Draft restored from this browser ✅");
-      } catch {
-        localStorage.removeItem(RESUME_DRAFT_KEY);
+    try {
+      const parsed = JSON.parse(editData);
+      const loaded = loadResumeForEditing(parsed, editId || parsed._id || parsed.id);
+      localStorage.removeItem("cg_edit_resume_data");
+      localStorage.removeItem("cg_edit_resume_id");
+      localStorage.removeItem("cg_edit_resume");
+      return loaded;
+    } catch (err) {
+      console.error("Failed to load resume for editing:", err);
+      setError("Failed to load resume for editing");
+      return false;
+    }
+  }
+
+  useEffect(() => {
+    const loadedEditResume = consumeEditResumeFromStorage();
+
+    if (!loadedEditResume) {
+      const savedDraft = localStorage.getItem(RESUME_DRAFT_KEY);
+      if (savedDraft) {
+        try {
+          setResume(normalizeResume(JSON.parse(savedDraft)));
+          setMessage("Draft restored from this browser ✅");
+        } catch {
+          localStorage.removeItem(RESUME_DRAFT_KEY);
+        }
       }
     }
 
     setDraftLoaded(true);
+
+    const handleEditResumeEvent = (event) => {
+      if (event?.detail?.resume) {
+        loadResumeForEditing(event.detail.resume, event.detail.resumeId);
+        return;
+      }
+
+      consumeEditResumeFromStorage();
+    };
+
+    window.addEventListener("cg:resume-edit", handleEditResumeEvent);
+
+    return () => {
+      window.removeEventListener("cg:resume-edit", handleEditResumeEvent);
+    };
   }, []);
 
   useEffect(() => {
@@ -416,7 +452,7 @@ Interests: ${join(payload.interests)}
       {message && <Notice tone="success">{message}</Notice>}
       {error && <Notice tone="error">{error}</Notice>}
 
-      <div className="grid gap-6 2xl:grid-cols-[1.05fr_0.95fr]">
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.12fr)_minmax(360px,0.78fr)]">
         <div className="space-y-6">
           <Card>
             <div className="flex flex-wrap gap-2">
@@ -561,15 +597,15 @@ Interests: ${join(payload.interests)}
           )}
         </div>
 
-        <div className="space-y-6 2xl:sticky 2xl:top-6 2xl:self-start">
+        <div className="space-y-4 xl:sticky xl:top-5 xl:self-start">
           <Card>
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-xl font-black">Live Resume Preview</h2>
+                <h2 className="text-lg font-black">Live Resume Preview</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-300">{selectedTemplate.layout} • {resume.customization.fontSize} • {resume.customization.spacing}</p>
               </div>
             </div>
-            <div ref={previewRef} className="overflow-auto rounded-3xl bg-slate-200 p-3 dark:bg-slate-950/60">
+            <div ref={previewRef} className="overflow-auto rounded-2xl bg-slate-200 p-2 dark:bg-slate-950/60">
               <ResumePreview resume={resume} checklist={checklist} />
             </div>
           </Card>
@@ -577,10 +613,10 @@ Interests: ${join(payload.interests)}
           <Card>
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-black">Resume Strength</h2>
+                <h2 className="text-lg font-black">Resume Strength</h2>
                 <p className="text-sm text-slate-500 dark:text-slate-300">Complete these checks to improve your profile.</p>
               </div>
-              <div className="text-3xl font-black text-indigo-600 dark:text-cyan-300">{strengthScore}%</div>
+              <div className="text-2xl font-black text-indigo-600 dark:text-cyan-300">{strengthScore}%</div>
             </div>
             <div className="mt-4 grid gap-2">
               {Object.entries({
@@ -592,7 +628,7 @@ Interests: ${join(payload.interests)}
                 hasStrongProjects: "Strong project details added",
                 hasAtsKeywords: "ATS keywords added",
               }).map(([key, label]) => (
-                <div key={key} className="flex items-center justify-between rounded-2xl bg-slate-50 p-3 text-sm font-bold dark:bg-white/5">
+                <div key={key} className="flex items-center justify-between rounded-xl bg-slate-50 p-2 text-xs font-bold dark:bg-white/5">
                   <span>{label}</span>
                   <span>{checklist[key] ? "✅" : "⚪"}</span>
                 </div>
@@ -601,8 +637,8 @@ Interests: ${join(payload.interests)}
           </Card>
 
           <Card>
-            <h2 className="text-xl font-black">Resume Actions</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <h2 className="text-lg font-black">Resume Actions</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <Button onClick={saveResume}>{loading ? "Saving..." : editingResumeId ? "Update Resume" : "Save Resume"}</Button>
               <Button variant="soft" onClick={analyzeThisResume}>Analyze This Resume</Button>
               <Button variant="soft" onClick={downloadResumePdf}>Download PDF</Button>
@@ -620,15 +656,15 @@ function ResumePreview({ resume }) {
   const show = custom.showSections || defaultCustomization.showSections;
   const titles = custom.sectionTitles || defaultCustomization.sectionTitles;
   const color = custom.themeColor || "#4f46e5";
-  const fontSize = custom.fontSize === "small" ? "text-[12px]" : custom.fontSize === "large" ? "text-[14px]" : "text-[13px]";
+  const fontSize = custom.fontSize === "small" ? "text-[10.8px]" : custom.fontSize === "large" ? "text-[12.6px]" : "text-[11.6px]";
   const spacing = custom.spacing === "compact" ? "space-y-2" : custom.spacing === "spacious" ? "space-y-5" : "space-y-3";
   const section = (key) => show[key] !== false;
   const linkButton = (label, url) => url ? <a href={safeUrl(url)} target="_blank" rel="noreferrer" className="font-bold" style={{ color }}>{label}</a> : null;
 
   return (
-    <div className={`mx-auto min-h-[920px] w-full max-w-[760px] bg-white p-8 text-slate-900 shadow-xl ${fontSize}`}>
-      <header className="border-b pb-4" style={{ borderColor: color }}>
-        <h1 className="text-3xl font-black tracking-tight" style={{ color }}>{resume.personalDetails.name || "Your Name"}</h1>
+    <div className={`mx-auto min-h-[720px] w-full max-w-[620px] bg-white p-5 text-slate-900 shadow-lg ${fontSize}`}>
+      <header className="border-b pb-3" style={{ borderColor: color }}>
+        <h1 className="text-2xl font-black tracking-tight" style={{ color }}>{resume.personalDetails.name || "Your Name"}</h1>
         <p className="mt-1 font-bold text-slate-700">{resume.careerDetails.targetRole || "Target Role"}</p>
         <p className="mt-2 text-xs text-slate-500">{[resume.personalDetails.email, resume.personalDetails.phone, resume.personalDetails.location].filter(Boolean).join(" | ")}</p>
         <div className="mt-2 flex flex-wrap gap-3 text-xs">
@@ -642,7 +678,7 @@ function ResumePreview({ resume }) {
         </div>
       </header>
 
-      <div className={`mt-5 ${spacing}`}>
+      <div className={`mt-4 ${spacing}`}>
         {section("summary") && resume.careerDetails.professionalSummary && <PreviewSection title={titles.summary} color={color}><p>{resume.careerDetails.professionalSummary}</p></PreviewSection>}
         {section("objective") && resume.careerDetails.careerObjective && <PreviewSection title={titles.objective} color={color}><p>{resume.careerDetails.careerObjective}</p></PreviewSection>}
         {section("skills") && <PreviewSection title={titles.skills} color={color}><SkillRows skills={resume.skills} /></PreviewSection>}
@@ -662,8 +698,8 @@ function ResumePreview({ resume }) {
 function PreviewSection({ title, color, children }) {
   return (
     <section>
-      <h2 className="mb-2 border-b pb-1 text-[11px] font-black uppercase tracking-[0.18em]" style={{ color, borderColor: `${color}55` }}>{title}</h2>
-      <div className="leading-6">{children}</div>
+      <h2 className="mb-1.5 border-b pb-1 text-[10px] font-black uppercase tracking-[0.16em]" style={{ color, borderColor: `${color}55` }}>{title}</h2>
+      <div className="leading-5">{children}</div>
     </section>
   );
 }
@@ -694,7 +730,7 @@ function ArrayEditor({ title, items, emptyItem, section, addItem, removeItem, up
       </div>
       <div className="space-y-4">
         {items.map((item, index) => (
-          <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+          <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50 p-3 dark:border-white/10 dark:bg-white/5">
             <div className="mb-3 flex items-center justify-between gap-3">
               <p className="font-black">{title} #{index + 1}</p>
               <Button variant="outline" onClick={() => removeItem(section, index, emptyItem)}>Remove</Button>
@@ -715,7 +751,7 @@ function ArrayEditor({ title, items, emptyItem, section, addItem, removeItem, up
 }
 
 function SectionTitle({ title }) {
-  return <h2 className="text-xl font-black">{title}</h2>;
+  return <h2 className="text-lg font-black">{title}</h2>;
 }
 
 function Input({ label, value, onChange, type = "text" }) {
@@ -726,7 +762,7 @@ function Input({ label, value, onChange, type = "text" }) {
         type={type}
         value={value || ""}
         onChange={(e) => onChange(e.target.value)}
-        className={`${type === "color" ? "h-[54px]" : ""} w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5`}
+        className={`${type === "color" ? "h-[46px]" : ""} w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5`}
       />
     </label>
   );
@@ -736,7 +772,7 @@ function Select({ label, value, onChange, options }) {
   return (
     <label className="block">
       <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5">
         {options.map((option) => <option key={option} value={option}>{option}</option>)}
       </select>
     </label>
@@ -747,7 +783,7 @@ function Textarea({ label, value, onChange }) {
   return (
     <label className="block md:col-span-2">
       <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">{label}</span>
-      <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={4} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5" />
+      <textarea value={value || ""} onChange={(e) => onChange(e.target.value)} rows={3} className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5" />
     </label>
   );
 }

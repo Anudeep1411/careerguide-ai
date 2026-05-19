@@ -187,12 +187,33 @@ export function History({ setPage }) {
   }
 
   async function editResume(resume) {
+    setError("");
+    setMessage("Opening resume in builder...");
+
     try {
+      // Save the list item immediately so navigation never opens an empty builder.
+      localStorage.setItem("cg_edit_resume_id", resume._id);
+      localStorage.setItem("cg_edit_resume_data", JSON.stringify(resume));
+
       const fullResume = await getFullResume(resume._id);
-      localStorage.setItem("cg_edit_resume_id", fullResume._id);
-      localStorage.setItem("cg_edit_resume_data", JSON.stringify(fullResume));
+      const resumeId = fullResume?._id || resume._id;
+
+      localStorage.setItem("cg_edit_resume_id", resumeId);
+      localStorage.setItem("cg_edit_resume_data", JSON.stringify(fullResume || resume));
+      localStorage.removeItem("cg_resume_builder_draft_v2");
+
+      window.dispatchEvent(
+        new CustomEvent("cg:resume-edit", {
+          detail: {
+            resume: fullResume || resume,
+            resumeId,
+          },
+        })
+      );
+
       setPage?.("builder");
     } catch (err) {
+      console.error("Failed to open resume for editing:", err);
       setError(err.message || "Failed to open resume for editing");
     }
   }
