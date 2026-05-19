@@ -1,41 +1,148 @@
-import { useState } from "react";
-import { Button, Card, PageHeader, ScoreCard } from "../components/Layout";
-import { roles } from "../data/mockData";
+import { useEffect, useMemo, useState } from "react";
+import { Button, Card, PageHeader } from "../components/Layout";
 import { apiRequest } from "../utils/api";
 
-export function JobMatch({ setPage }) {
-  const [targetRole, setTargetRole] = useState("");
-  const [companyName, setCompanyName] = useState("Demo Company");
+const emptyResult = null;
 
-  const [resumeText, setResumeText] = useState(
-    ""
-  );
+function arrayToText(value) {
+  if (Array.isArray(value)) return value.filter(Boolean).join(", ");
+  return value || "";
+}
 
-  const [jobDescription, setJobDescription] = useState(
-    ""
-  );
+function buildResumeText(resume) {
+  if (!resume) return "";
 
-  const [jobMatch, setJobMatch] = useState(null);
+  const personal = resume.personalDetails || {};
+  const career = resume.careerDetails || {};
+  const skills = resume.skills || {};
+
+  return `
+Name: ${personal.name || ""}
+Email: ${personal.email || ""}
+Phone: ${personal.phone || ""}
+Location: ${personal.location || ""}
+LinkedIn: ${personal.linkedin || ""}
+GitHub: ${personal.github || ""}
+Portfolio: ${personal.portfolio || ""}
+LeetCode: ${personal.leetcode || ""}
+
+Target Role: ${career.targetRole || ""}
+Experience Level: ${career.experienceLevel || ""}
+Professional Summary: ${career.professionalSummary || ""}
+Career Objective: ${career.careerObjective || ""}
+
+Skills:
+Programming: ${arrayToText(skills.programmingLanguages)}
+Frontend: ${arrayToText(skills.frontend)}
+Backend: ${arrayToText(skills.backend)}
+Databases: ${arrayToText(skills.databases)}
+Tools: ${arrayToText(skills.tools)}
+Soft Skills: ${arrayToText(skills.softSkills)}
+
+Education:
+${(resume.education || [])
+  .map((edu) => `${edu.degree || ""} ${edu.college || ""} ${edu.university || ""} ${edu.year || ""} ${edu.score || ""}`)
+  .join("\n")}
+
+Projects:
+${(resume.projects || [])
+  .map(
+    (project) =>
+      `${project.title || ""}\n${project.description || ""}\nTech Stack: ${project.techStack || ""}\nFeatures: ${project.features || ""}\nGitHub: ${project.githubLink || ""}\nLive: ${project.liveLink || ""}`
+  )
+  .join("\n\n")}
+
+Experience:
+${(resume.experience || [])
+  .map((item) => `${item.role || ""} at ${item.company || ""} ${item.duration || ""}\n${item.description || ""}`)
+  .join("\n\n")}
+
+Certifications:
+${(resume.certifications || []).map((item) => `${item.title || ""} ${item.issuer || ""} ${item.year || ""}`).join("\n")}
+`.trim();
+}
+
+export function JobMatch() {
+  const [mode, setMode] = useState("saved");
+  const [resumes, setResumes] = useState([]);
+  const [selectedResumeId, setSelectedResumeId] = useState("");
+  const [resumeText, setResumeText] = useState(() => localStorage.getItem("cg_analyzer_resume_text") || "");
+  const [jobDescription, setJobDescription] = useState("");
+  const [targetRole, setTargetRole] = useState(() => localStorage.getItem("cg_analyzer_target_role") || "");
+  const [companyName, setCompanyName] = useState("");
+  const [resumePdf, setResumePdf] = useState(null);
+  const [jobPdf, setJobPdf] = useState(null);
+  const [result, setResult] = useState(emptyResult);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
-  async function analyzeJobMatch() {
-    setLoading(true);
+  useEffect(() => {
+    loadResumes();
+    loadHistory();
+  }, []);
+
+  const selectedResume = useMemo(
+    () => resumes.find((resume) => resume._id === selectedResumeId),
+    [resumes, selectedResumeId]
+  );
+
+  useEffect(() => {
+    if (selectedResume) {
+      setResumeText(buildResumeText(selectedResume));
+      setTargetRole(selectedResume?.careerDetails?.targetRole || targetRole || "");
+    }
+  }, [selectedResumeId]);
+
+  async function loadResumes() {
+    try {
+      const data = await apiRequest("/resumes");
+      setResumes(data.resumes || []);
+    } catch (err) {
+      setMessage("Saved resumes not loaded. You can still paste/upload resume text.");
+    }
+  }
+
+  async function loadHistory() {
+    try {
+      const data = await apiRequest("/job-match");
+      setHistory(data.matches || []);
+    } catch {
+      setHistory([]);
+    }
+  }
+
+  function clearResult() {
+    setResult(null);
     setError("");
-    setJobMatch(null);
+    setMessage("");
+  }
+
+  async function analyzeManual() {
+    clearResult();
+
+    if (!resumeText.trim() || resumeText.trim().length < 30) {
+      setError("Please select/paste resume text before analysis.");
+      return;
+    }
+
+    if (!jobDescription.trim() || jobDescription.trim().length < 30) {
+      setError("Please paste job description or upload job notification PDF.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const data = await apiRequest("/job-match", {
         method: "POST",
-        body: JSON.stringify({
-          targetRole,
-          companyName,
-          resumeText,
-          jobDescription,
-        }),
+        body: JSON.stringify({ resumeText, jobDescription, targetRole, companyName }),
       });
 
-      setJobMatch(data.jobMatch);
+      setResult(data.result);
+      setMessage("Detailed job match report generated ✅");
+      loadHistory();
     } catch (err) {
       setError(err.message || "Job match analysis failed");
     } finally {
@@ -43,244 +150,314 @@ export function JobMatch({ setPage }) {
     }
   }
 
-  const matchScore = jobMatch?.matchScore || 0;
-  const keywordScore = jobMatch?.requiredKeywords?.length
-    ? Math.round(
-        (jobMatch.matchedSkills.length / jobMatch.requiredKeywords.length) * 100
-      )
-    : 0;
+  async function analyzePdf() {
+    clearResult();
+
+    if (!resumePdf && !resumeText.trim()) {
+      setError("Upload resume PDF or paste/select resume text.");
+      return;
+    }
+
+    if (!jobPdf && !jobDescription.trim()) {
+      setError("Upload job notification PDF or paste job description.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("targetRole", targetRole || "");
+    formData.append("companyName", companyName || "");
+    formData.append("resumeText", resumeText || "");
+    formData.append("jobDescription", jobDescription || "");
+    if (resumePdf) formData.append("resumePdf", resumePdf);
+    if (jobPdf) formData.append("jobPdf", jobPdf);
+
+    setLoading(true);
+
+    try {
+      const data = await apiRequest("/job-match/pdf", {
+        method: "POST",
+        body: formData,
+      });
+
+      setResult(data.result);
+      setMessage("PDF job match report generated ✅");
+      loadHistory();
+    } catch (err) {
+      setError(err.message || "PDF analysis failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function printReport() {
+    window.print();
+  }
 
   return (
     <div>
       <PageHeader
-        eyebrow="AI Job Match Analyzer"
-        title="Compare your resume with any job description"
-        desc="Paste your resume and job description to get match score, shortlist chance estimate, missing skills and expected interview questions."
-        action={
-          <Button onClick={analyzeJobMatch}>
-            {loading ? "Analyzing..." : "Analyze Match"}
-          </Button>
-        }
+        eyebrow="Phase 3A"
+        title="Resume + Job Notification Match"
+        desc="Compare saved resume, uploaded resume PDF or manual resume text against a job notification PDF or job description."
       />
 
-      {error && (
-        <div className="mb-5 rounded-2xl bg-red-500/10 p-4 font-bold text-red-500">
-          {error}
-        </div>
-      )}
-
-      <div className="grid gap-5 xl:grid-cols-[430px_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
         <div className="space-y-5">
           <Card>
-            <label className="block">
-              <span className="mb-2 block text-sm font-bold">Target Role</span>
+            <h2 className="text-lg font-black">Input Mode</h2>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <ModeButton active={mode === "saved"} onClick={() => setMode("saved")}>Saved</ModeButton>
+              <ModeButton active={mode === "manual"} onClick={() => setMode("manual")}>Manual</ModeButton>
+              <ModeButton active={mode === "pdf"} onClick={() => setMode("pdf")}>PDF</ModeButton>
+            </div>
+          </Card>
+
+          <Card>
+            <h2 className="text-lg font-black">Job Details</h2>
+            <div className="mt-4 space-y-3">
+              <Input label="Company Name" value={companyName} onChange={setCompanyName} placeholder="Example: TCS, Infosys, Google" />
+              <Input label="Target Role" value={targetRole} onChange={setTargetRole} placeholder="Example: Frontend Developer" />
+            </div>
+          </Card>
+
+          {mode === "saved" && (
+            <Card>
+              <h2 className="text-lg font-black">Select Saved Resume</h2>
               <select
-                value={targetRole}
-                onChange={(e) => setTargetRole(e.target.value)}
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
+                value={selectedResumeId}
+                onChange={(e) => setSelectedResumeId(e.target.value)}
+                className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none dark:border-white/10 dark:bg-white/5"
               >
-                {roles.map((role) => (
-                  <option key={role}>{role}</option>
+                <option value="">Choose resume</option>
+                {resumes.map((resume) => (
+                  <option key={resume._id} value={resume._id}>
+                    {resume.title || resume.personalDetails?.name || "Untitled Resume"}
+                  </option>
                 ))}
               </select>
-            </label>
-
-            <label className="mt-4 block">
-              <span className="mb-2 block text-sm font-bold">Company Name</span>
-              <input
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Example: TCS, Infosys, Demo Company"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-              />
-            </label>
-
-            <label className="mt-4 block">
-              <span className="mb-2 block text-sm font-bold">Resume Text</span>
-              <textarea
-                value={resumeText}
-                onChange={(e) => setResumeText(e.target.value)}
-                placeholder="Paste resume text here..."
-                className="h-52 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-              />
-            </label>
-
-            <label className="mt-4 block">
-              <span className="mb-2 block text-sm font-bold">Job Description</span>
-              <textarea
-                value={jobDescription}
-                onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="Paste company job notification / job description here..."
-                className="h-52 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-              />
-            </label>
-
-            <Button onClick={analyzeJobMatch} className="mt-4 w-full">
-              {loading ? "Analyzing..." : "Analyze Job Match"}
-            </Button>
-          </Card>
-
-          <Card>
-            <h2 className="text-xl font-black">Important Note</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              Shortlist chance is only an estimate based on resume-job keyword
-              match. Actual shortlisting depends on recruiter, company, competition
-              and experience.
-            </p>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-3">
-            <ScoreCard
-              title="Job Match"
-              value={matchScore}
-              label={
-                matchScore >= 80
-                  ? "High"
-                  : matchScore >= 60
-                  ? "Moderate"
-                  : "Low"
-              }
-              tone={
-                matchScore >= 80
-                  ? "success"
-                  : matchScore >= 60
-                  ? "warning"
-                  : "danger"
-              }
-              trend="+"
-            />
-
-            <ScoreCard
-              title="Shortlist Chance"
-              value={
-                jobMatch?.shortlistChance === "High"
-                  ? 85
-                  : jobMatch?.shortlistChance === "Moderate"
-                  ? 65
-                  : 40
-              }
-              label={jobMatch?.shortlistChance || "Estimate"}
-              tone={
-                jobMatch?.shortlistChance === "High"
-                  ? "success"
-                  : jobMatch?.shortlistChance === "Moderate"
-                  ? "warning"
-                  : "danger"
-              }
-              trend="+"
-            />
-
-            <ScoreCard
-              title="Keyword Match"
-              value={keywordScore}
-              label={`${jobMatch?.matchedSkills?.length || 0} matched`}
-              tone={keywordScore >= 70 ? "success" : "warning"}
-              trend="+"
-            />
-          </div>
-
-          {!jobMatch ? (
-            <Card>
-              <div className="grid min-h-[420px] place-items-center text-center">
-                <div>
-                  <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-indigo-600/10 text-3xl">
-                    🎯
-                  </div>
-                  <h2 className="mt-4 text-2xl font-black">No job match yet</h2>
-                  <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
-                    Paste your resume and job description, then click Analyze Job
-                    Match to see score, missing skills and expected questions.
-                  </p>
-                </div>
-              </div>
             </Card>
-          ) : (
+          )}
+
+          {mode === "pdf" && (
             <Card>
-              <h2 className="text-2xl font-black">Job Match Report</h2>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <ResultBox
-                  title="Matched Skills"
-                  items={jobMatch.matchedSkills || []}
-                  empty="No matched skills found"
-                />
-
-                <ResultBox
-                  title="Missing Skills"
-                  items={jobMatch.missingSkills || []}
-                  empty="No missing skills detected"
-                />
-
-                <ResultBox
-                  title="Required Keywords"
-                  items={jobMatch.requiredKeywords || []}
-                  empty="No keywords detected from job description"
-                />
-
-                <ResultBox
-                  title="Resume Improvements"
-                  items={jobMatch.resumeImprovements || []}
-                  empty="No improvements suggested"
-                />
-
-                <ResultBox
-                  title="Expected Interview Questions"
-                  items={jobMatch.expectedInterviewQuestions || []}
-                  empty="No questions generated"
-                />
-
-                <ResultBox
-                  title="Preparation Roadmap"
-                  items={jobMatch.preparationRoadmap || []}
-                  empty="No roadmap generated"
-                />
-              </div>
-
-              <div className="mt-5 rounded-2xl bg-indigo-600/10 p-4">
-                <h3 className="font-black text-indigo-600 dark:text-cyan-300">
-                  Shortlist Chance Estimate
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                  Your shortlist chance is currently{" "}
-                  <b>{jobMatch.shortlistChance}</b> with a job match score of{" "}
-                  <b>{jobMatch.matchScore}/100</b>. Improve missing skills and
-                  resume keywords to increase your chances.
-                </p>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button variant="soft">Save Match</Button>
-                <Button variant="soft">Improve Resume</Button>
-                <Button onClick={() => setPage("interview")} variant="soft">
-                  Practice Interview
-                </Button>
+              <h2 className="text-lg font-black">Upload PDFs</h2>
+              <div className="mt-4 space-y-4">
+                <FileInput label="Resume PDF" onChange={setResumePdf} file={resumePdf} />
+                <FileInput label="Job Notification PDF" onChange={setJobPdf} file={jobPdf} />
               </div>
             </Card>
           )}
+
+          <Card>
+            <h2 className="text-lg font-black">Resume Text</h2>
+            <textarea
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
+              rows={8}
+              className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none dark:border-white/10 dark:bg-white/5"
+              placeholder="Paste resume text or select saved resume/upload PDF."
+            />
+          </Card>
+
+          <Card>
+            <h2 className="text-lg font-black">Job Description</h2>
+            <textarea
+              value={jobDescription}
+              onChange={(e) => setJobDescription(e.target.value)}
+              rows={8}
+              className="mt-4 w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none dark:border-white/10 dark:bg-white/5"
+              placeholder="Paste job description here. If you upload job PDF, this is optional."
+            />
+          </Card>
+
+          {message && <Alert type="success">{message}</Alert>}
+          {error && <Alert type="error">{error}</Alert>}
+
+          <div className="flex flex-wrap gap-3">
+            <Button onClick={mode === "pdf" ? analyzePdf : analyzeManual}>
+              {loading ? "Analyzing..." : "Generate Match Report"}
+            </Button>
+            {result && <Button variant="soft" onClick={printReport}>Print Report</Button>}
+          </div>
+        </div>
+
+        <div className="space-y-5">
+          {result ? <DetailedReport result={result} /> : <EmptyReport />}
+
+          <Card>
+            <h2 className="text-lg font-black">Recent Match Reports</h2>
+            <div className="mt-4 space-y-3">
+              {history.length === 0 && <p className="text-sm text-slate-500">No job match history yet.</p>}
+              {history.slice(0, 5).map((item) => (
+                <button
+                  key={item._id}
+                  type="button"
+                  onClick={() => setResult({ ...item, executiveSummary: `${item.companyName || "Job"} match score is ${item.matchScore}/100.` })}
+                  className="w-full rounded-2xl border border-slate-200 p-4 text-left hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/5"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-bold">{item.companyName || "Company"}</p>
+                      <p className="text-sm text-slate-500">{item.targetRole}</p>
+                    </div>
+                    <span className="rounded-full bg-indigo-100 px-3 py-1 text-sm font-black text-indigo-700 dark:bg-indigo-500/20 dark:text-indigo-200">
+                      {item.matchScore}/100
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
         </div>
       </div>
     </div>
   );
 }
 
-function ResultBox({ title, items, empty }) {
+function DetailedReport({ result }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-white/5">
-      <h3 className="font-black">{title}</h3>
+    <div className="space-y-5 print:bg-white print:text-black">
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[0.25em] text-indigo-500">Detailed Report</p>
+            <h2 className="mt-2 text-2xl font-black">{result.companyName || "Job"} Match Report</h2>
+            <p className="mt-2 max-w-2xl text-slate-600 dark:text-slate-300">{result.executiveSummary}</p>
+          </div>
+          <div className="rounded-3xl bg-indigo-600 p-5 text-center text-white shadow-lg shadow-indigo-500/25">
+            <p className="text-sm font-bold">Match Score</p>
+            <p className="text-4xl font-black">{result.matchScore}</p>
+            <p className="text-xs font-bold">/100</p>
+          </div>
+        </div>
+      </Card>
 
-      {items.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">
-          {empty}
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          {items.map((item) => (
-            <li key={item}>• {item}</li>
-          ))}
-        </ul>
-      )}
+      <div className="grid gap-5 md:grid-cols-3">
+        <MetricCard title="Shortlist Chance" value={result.shortlistChance} />
+        <MetricCard title="Matched Skills" value={result.matchedSkills?.length || 0} />
+        <MetricCard title="Missing Skills" value={result.missingSkills?.length || 0} />
+      </div>
+
+      <ReportSection title="Matched Skills" items={result.matchedSkills} chip="success" />
+      <ReportSection title="Missing Skills" items={result.missingSkills} chip="danger" />
+      <ReportSection title="Required Keywords" items={result.requiredKeywords} chip="neutral" />
+      <ReportSection title="Resume Changes Needed" items={result.resumeImprovements} numbered />
+      <ReportSection title="Expected Interview Questions" items={result.expectedInterviewQuestions} numbered />
+      <ReportSection title="30-Day Preparation Roadmap" items={result.preparationRoadmap} numbered />
     </div>
   );
+}
+
+function EmptyReport() {
+  return (
+    <Card>
+      <div className="py-12 text-center">
+        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-3xl bg-indigo-100 text-3xl dark:bg-indigo-500/20">
+          📄
+        </div>
+        <h2 className="text-2xl font-black">Your detailed report will appear here</h2>
+        <p className="mx-auto mt-3 max-w-xl text-slate-500 dark:text-slate-300">
+          Select a saved resume or upload PDFs, paste the job description and generate a professional match report.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+function MetricCard({ title, value }) {
+  return (
+    <Card>
+      <p className="text-sm font-bold text-slate-500 dark:text-slate-300">{title}</p>
+      <p className="mt-2 text-2xl font-black">{value}</p>
+    </Card>
+  );
+}
+
+function ReportSection({ title, items = [], chip, numbered = false }) {
+  return (
+    <Card>
+      <h3 className="text-lg font-black">{title}</h3>
+      {items.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500">No items found.</p>
+      ) : numbered ? (
+        <ol className="mt-4 space-y-3">
+          {items.map((item, index) => (
+            <li key={`${title}-${index}`} className="rounded-2xl bg-slate-50 p-3 text-sm dark:bg-white/5">
+              <span className="mr-2 font-black text-indigo-600">{index + 1}.</span>
+              {item}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {items.map((item, index) => (
+            <span key={`${title}-${index}`} className={chipClass(chip)}>
+              {item}
+            </span>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function chipClass(type) {
+  const base = "rounded-full px-3 py-1 text-sm font-bold";
+  if (type === "success") return `${base} bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-200`;
+  if (type === "danger") return `${base} bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-200`;
+  return `${base} bg-slate-100 text-slate-700 dark:bg-white/10 dark:text-slate-200`;
+}
+
+function ModeButton({ active, onClick, children }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl px-3 py-3 text-sm font-black transition ${
+        active
+          ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/20"
+          : "bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-white/10 dark:text-slate-200"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Input({ label, value, onChange, placeholder }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">{label}</span>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-3 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
+      />
+    </label>
+  );
+}
+
+function FileInput({ label, file, onChange }) {
+  return (
+    <label className="block rounded-2xl border border-dashed border-slate-300 p-4 dark:border-white/20">
+      <span className="block text-sm font-black">{label}</span>
+      <input
+        type="file"
+        accept="application/pdf"
+        onChange={(e) => onChange(e.target.files?.[0] || null)}
+        className="mt-3 block w-full text-sm"
+      />
+      {file && <span className="mt-2 block text-xs font-bold text-emerald-600">Selected: {file.name}</span>}
+    </label>
+  );
+}
+
+function Alert({ type, children }) {
+  const cls =
+    type === "success"
+      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+      : "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300";
+
+  return <div className={`rounded-2xl p-3 text-sm font-bold ${cls}`}>{children}</div>;
 }

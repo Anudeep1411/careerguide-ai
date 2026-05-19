@@ -1,53 +1,42 @@
 const API_BASE_URL =
   import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD
-    ? "https://careerguide-ai-7s24.onrender.com/api"
-    : "http://localhost:5000/api");
+  (import.meta.env.DEV
+    ? "http://localhost:5000/api"
+    : "https://careerguide-ai-7s24.onrender.com/api");
 
 export async function apiRequest(endpoint, options = {}) {
   const token = localStorage.getItem("cg_token");
   const isFormData = options.body instanceof FormData;
 
   const headers = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...(options.headers || {}),
   };
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+  if (isFormData && headers["Content-Type"]) {
+    delete headers["Content-Type"];
   }
 
-  const url = endpoint.startsWith("http")
-    ? endpoint
-    : `${API_BASE_URL}${endpoint}`;
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
 
+  const rawText = await response.text();
+
+  let data = {};
   try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    });
-
-    const contentType = response.headers.get("content-type");
-    const data =
-      contentType && contentType.includes("application/json")
-        ? await response.json()
-        : await response.text();
-
-    if (!response.ok) {
-      const message =
-        typeof data === "object" && data?.message
-          ? data.message
-          : typeof data === "string" && data
-          ? data
-          : "Something went wrong";
-
-      throw new Error(message);
-    }
-
-    return data;
-  } catch (error) {
-    throw new Error(
-      error.message || "Backend server not reachable. Please try again."
-    );
+    data = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    data = { message: rawText || "Invalid server response" };
   }
+
+  if (!response.ok) {
+    throw new Error(data.message || data.error || "Request failed");
+  }
+
+  return data;
 }
+
+export { API_BASE_URL };

@@ -75,7 +75,7 @@ function getDefaultResume() {
       geeksforgeeks: "",
     },
     careerDetails: {
-      targetRole: loggedUser?.targetRole || "Frontend Developer",
+      targetRole: loggedUser?.targetRole || "",
       experienceLevel: "Fresher",
       careerObjective: "To begin my career as a software developer and build useful, user-friendly real-world applications.",
       professionalSummary: "Motivated fresher with hands-on project experience, strong fundamentals and interest in building clean, responsive and scalable web applications.",
@@ -414,7 +414,7 @@ Interests: ${join(payload.interests)}
 
   function analyzeThisResume() {
     localStorage.setItem("cg_analyzer_resume_text", buildResumeText());
-    localStorage.setItem("cg_analyzer_target_role", resume.careerDetails.targetRole || "Frontend Developer");
+    localStorage.setItem("cg_analyzer_target_role", resume.careerDetails.targetRole || "");
     setPage?.("analyzer");
   }
 
@@ -824,3 +824,4 @@ function buildPrintHtml(resume) {
     ${section("customSections") ? resume.customSections.filter(hasAnyValue).map((item) => block(item.heading || titles.customSections, item.content ? `<p>${clean(item.content)}</p>` : "")).join("") : ""}
   </div><div class="note">Press Ctrl + P → Save as PDF</div></body></html>`;
 }
+
