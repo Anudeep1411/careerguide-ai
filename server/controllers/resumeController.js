@@ -34,7 +34,7 @@ export const getMyResumes = async (req, res) => {
     const resumes = await Resume.find({ user: userId })
       .sort({ updatedAt: -1 })
       .select(
-        "title personalDetails.name personalDetails.email careerDetails.targetRole template resumeChecklist createdAt updatedAt"
+        "title personalDetails.name personalDetails.email careerDetails.targetRole template customization resumeChecklist createdAt updatedAt"
       );
 
     res.json({

@@ -1,259 +1,161 @@
-import { useEffect, useState } from "react";
-import { quickActions } from "../data/mockData";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Card, PageHeader, ScoreCard } from "../components/Layout";
 import { apiRequest } from "../utils/api";
 
 export function Dashboard({ setPage }) {
-  const [stats, setStats] = useState({
-    savedResumes: 0,
-    resumeScore: 0,
-    jobMatchScore: 0,
-    interviewScore: 0,
-    profileStrength: 0,
+  const user = useMemo(() => JSON.parse(localStorage.getItem("cg_user") || "{}"), []);
+  const [dashboard, setDashboard] = useState({
+    stats: {
+      savedResumes: 0,
+      resumeScore: 0,
+      jobMatchScore: 0,
+      interviewScore: 0,
+      profileStrength: 0,
+    },
+    weakAreas: [],
+    recentActivities: [],
   });
-
-  const [weakAreas, setWeakAreas] = useState([]);
-  const [recentActivities, setRecentActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function fetchDashboardStats() {
-    try {
+  useEffect(() => {
+    async function loadDashboard() {
       setLoading(true);
       setError("");
 
-      const data = await apiRequest("/dashboard/stats");
-
-      setStats(data.stats || {});
-      setWeakAreas(data.weakAreas || []);
-      setRecentActivities(data.recentActivities || []);
-    } catch (err) {
-      setError(err.message || "Failed to load dashboard");
-    } finally {
-      setLoading(false);
+      try {
+        const data = await apiRequest("/dashboard/stats");
+        setDashboard({
+          stats: {
+            savedResumes: data?.stats?.savedResumes || 0,
+            resumeScore: data?.stats?.resumeScore || 0,
+            jobMatchScore: data?.stats?.jobMatchScore || 0,
+            interviewScore: data?.stats?.interviewScore || 0,
+            profileStrength: data?.stats?.profileStrength || 0,
+          },
+          weakAreas: data?.weakAreas || [],
+          recentActivities: data?.recentActivities || [],
+        });
+      } catch (err) {
+        setError(err.message || "Failed to load dashboard");
+      } finally {
+        setLoading(false);
+      }
     }
-  }
 
-  useEffect(() => {
-    fetchDashboardStats();
+    loadDashboard();
   }, []);
 
-  const dashboardCards = [
-    {
-      title: "Resume Score",
-      value: stats.resumeScore || 0,
-      label:
-        stats.resumeScore >= 80
-          ? "Good"
-          : stats.resumeScore >= 60
-          ? "Average"
-          : "Improve",
-      tone:
-        stats.resumeScore >= 80
-          ? "success"
-          : stats.resumeScore >= 60
-          ? "warning"
-          : "danger",
-      trend: "Real",
-    },
-    {
-      title: "Interview Score",
-      value: Math.min((stats.interviewScore || 0) * 10, 100),
-      label: `${stats.interviewScore || 0}/10`,
-      tone:
-        stats.interviewScore >= 8
-          ? "success"
-          : stats.interviewScore >= 6
-          ? "warning"
-          : "danger",
-      trend: "Real",
-    },
-    {
-      title: "Job Match Score",
-      value: stats.jobMatchScore || 0,
-      label:
-        stats.jobMatchScore >= 80
-          ? "High"
-          : stats.jobMatchScore >= 60
-          ? "Moderate"
-          : "Low",
-      tone:
-        stats.jobMatchScore >= 80
-          ? "success"
-          : stats.jobMatchScore >= 60
-          ? "warning"
-          : "danger",
-      trend: "Real",
-    },
-    {
-      title: "Profile Strength",
-      value: stats.profileStrength || 0,
-      label:
-        stats.profileStrength >= 80
-          ? "Excellent"
-          : stats.profileStrength >= 60
-          ? "Good"
-          : "Build",
-      tone:
-        stats.profileStrength >= 80
-          ? "success"
-          : stats.profileStrength >= 60
-          ? "warning"
-          : "danger",
-      trend: "Real",
-    },
+  const quickActions = [
+    { id: "builder", title: "Build Resume", desc: "Create or update your ATS-friendly resume", icon: "📝" },
+    { id: "analyzer", title: "Analyze Resume", desc: "Check ATS score, missing skills and weak sections", icon: "📊" },
+    { id: "history", title: "Resume History", desc: "View, edit, analyze and download saved resumes", icon: "🗂️" },
+    { id: "jobmatch", title: "Match Job", desc: "Compare your resume with a job description", icon: "🎯" },
   ];
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         eyebrow="Dashboard"
-        title="Welcome back 👋"
-        desc="Your real career readiness stats from saved resumes, resume analyses, job matches and interview practice."
-        action={
-          <Button onClick={fetchDashboardStats} variant="soft">
-            Refresh Dashboard
-          </Button>
-        }
+        title={`Welcome back${user?.name ? `, ${user.name}` : ""}`}
+        desc="Track your resume progress, analysis results and career readiness in one place."
+        action={<Button onClick={() => setPage?.("builder")}>Build Resume</Button>}
       />
 
+      {user?.forcePasswordChange && (
+        <div className="rounded-3xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm font-semibold text-amber-700 dark:text-amber-200">
+          You are using a temporary password. Please change it from the Change Password page before continuing.
+        </div>
+      )}
+
       {error && (
-        <div className="mb-5 rounded-2xl bg-red-500/10 p-4 font-bold text-red-500">
+        <div className="rounded-3xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300">
           {error}
         </div>
       )}
 
-      {loading ? (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <ScoreCard title="Resume Score" value={dashboard.stats.resumeScore} label="Latest ATS" tone={dashboard.stats.resumeScore >= 75 ? "success" : dashboard.stats.resumeScore >= 50 ? "warning" : "danger"} trend={loading ? "Loading..." : ""} />
+        <ScoreCard title="Job Match" value={dashboard.stats.jobMatchScore} label="Latest match" tone={dashboard.stats.jobMatchScore >= 75 ? "success" : dashboard.stats.jobMatchScore >= 50 ? "warning" : "danger"} />
+        <ScoreCard title="Interview" value={dashboard.stats.interviewScore * 10} label="Latest practice" tone={dashboard.stats.interviewScore >= 7 ? "success" : dashboard.stats.interviewScore >= 5 ? "warning" : "danger"} />
+        <ScoreCard title="Profile Strength" value={dashboard.stats.profileStrength} label={`${dashboard.stats.savedResumes} saved resumes`} tone={dashboard.stats.profileStrength >= 75 ? "success" : "warning"} />
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card>
-          <div className="grid min-h-[300px] place-items-center text-center">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-indigo-600/10 text-3xl">
-                📊
-              </div>
-              <p className="mt-4 font-black">Loading dashboard data...</p>
+              <h2 className="text-xl font-black">Quick Actions</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-300">Continue from where you left off.</p>
             </div>
           </div>
-        </Card>
-      ) : (
-        <>
-          <div className="mb-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <Card>
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                Saved Resumes
-              </p>
-              <p className="mt-3 text-4xl font-black">{stats.savedResumes || 0}</p>
-              <p className="mt-2 text-xs font-bold text-indigo-600 dark:text-cyan-300">
-                Stored in MongoDB
-              </p>
-            </Card>
 
-            {dashboardCards.map((card) => (
-              <ScoreCard key={card.title} {...card} />
+          <div className="grid gap-4 md:grid-cols-2">
+            {quickActions.map((action) => (
+              <button
+                key={action.id}
+                type="button"
+                onClick={() => setPage?.(action.id)}
+                className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-left transition hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-white hover:shadow-lg dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+              >
+                <div className="text-2xl">{action.icon}</div>
+                <h3 className="mt-3 text-lg font-black">{action.title}</h3>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">{action.desc}</p>
+              </button>
             ))}
           </div>
+        </Card>
 
-          <section className="mt-6">
-            <h2 className="mb-4 text-2xl font-black">Quick Actions</h2>
+        <Card>
+          <h2 className="text-xl font-black">Weak Areas</h2>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Based on your recent analysis and job matches.</p>
 
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {quickActions.map((action) => (
-                <button
-                  key={action.id}
-                  onClick={() => setPage(action.id)}
-                  className="rounded-[1.5rem] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-400 dark:border-white/10 dark:bg-white/[0.04]"
-                >
-                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-indigo-600/10 text-2xl">
-                    {action.icon}
-                  </div>
-
-                  <h3 className="mt-4 text-lg font-black">{action.title}</h3>
-
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    {action.desc}
-                  </p>
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <div className="mt-6 grid gap-4 xl:grid-cols-[1fr_360px]">
-            <Card>
-              <h2 className="mb-4 text-2xl font-black">Recent Activity</h2>
-
-              {recentActivities.length === 0 ? (
-                <div className="rounded-2xl bg-slate-50 p-6 text-center dark:bg-white/5">
-                  <p className="font-bold">No activity yet</p>
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    Save a resume, analyze resume, match a job or practice interview.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {recentActivities.map((item, index) => (
-                    <div
-                      key={`${item.type}-${index}`}
-                      className="flex items-center gap-4 rounded-2xl bg-slate-50 p-4 dark:bg-white/5"
-                    >
-                      <div className="grid h-11 w-11 place-items-center rounded-2xl bg-indigo-600/10">
-                        📌
-                      </div>
-
-                      <div className="mr-auto">
-                        <p className="font-bold">{item.type}</p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                          {item.title}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        <p className="font-black">{item.score}</p>
-                        <p className="text-xs text-slate-500">
-                          {item.date
-                            ? new Date(item.date).toLocaleDateString()
-                            : "Recently"}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </Card>
-
-            <Card>
-              <h2 className="mb-4 text-2xl font-black">Weak Areas</h2>
-
-              {weakAreas.length === 0 ? (
-                <div className="rounded-2xl bg-slate-50 p-5 text-center dark:bg-white/5">
-                  <p className="font-bold">No weak areas detected</p>
-                  <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-                    Run resume analysis, job match or interview to detect weak areas.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {weakAreas.map((area) => (
-                    <div
-                      key={area}
-                      className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-white/5"
-                    >
-                      <span className="h-2 w-2 rounded-full bg-amber-400" />
-                      <span className="font-semibold">{area}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <Button
-                onClick={() => setPage("interview")}
-                className="mt-5 w-full"
-                variant="soft"
-              >
-                Practice Weak Areas
-              </Button>
-            </Card>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {dashboard.weakAreas?.length ? (
+              dashboard.weakAreas.map((area) => (
+                <span key={area} className="rounded-full bg-amber-100 px-3 py-2 text-xs font-bold text-amber-700 dark:bg-amber-500/10 dark:text-amber-200">
+                  {area}
+                </span>
+              ))
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-300">No weak areas yet. Analyze your resume to get insights.</p>
+            )}
           </div>
-        </>
-      )}
+        </Card>
+      </div>
+
+      <Card>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-black">Recent Activity</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-300">Your latest resume, analysis, job match and interview activity.</p>
+          </div>
+          <Button variant="soft" onClick={() => setPage?.("history")}>View History</Button>
+        </div>
+
+        {dashboard.recentActivities?.length ? (
+          <div className="space-y-3">
+            {dashboard.recentActivities.slice(0, 6).map((item, index) => (
+              <div key={`${item.type}-${index}`} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+                <div>
+                  <p className="font-black">{item.type}</p>
+                  <p className="text-sm text-slate-500 dark:text-slate-300">{item.title}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-black text-indigo-600 dark:text-cyan-300">{item.score}</p>
+                  <p className="text-xs text-slate-500">{item.date ? new Date(item.date).toLocaleString() : ""}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-3xl border border-dashed border-slate-300 p-8 text-center dark:border-white/10">
+            <p className="font-bold">No activity yet.</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Start by creating your first resume.</p>
+            <div className="mt-4"><Button onClick={() => setPage?.("builder")}>Create Resume</Button></div>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

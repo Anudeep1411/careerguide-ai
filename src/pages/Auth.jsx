@@ -1,20 +1,19 @@
 import { useState } from "react";
 import { apiRequest } from "../utils/api";
 
+const ADMIN_EMAIL = "carrerguideai@gmail.com";
+
 const initialForm = {
   name: "",
   email: "",
   password: "",
   confirmPassword: "",
-  newPassword: "",
   targetRole: "",
-  otp: "",
 };
 
 export function Auth({ mode = "login", setPage, setUser }) {
   const [activeMode, setActiveMode] = useState(mode);
   const [form, setForm] = useState(initialForm);
-  const [otpSent, setOtpSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -29,7 +28,6 @@ export function Auth({ mode = "login", setPage, setUser }) {
 
   function switchMode(nextMode) {
     setActiveMode(nextMode);
-    setOtpSent(false);
     setMessage("");
     setError("");
     setForm((prev) => ({
@@ -45,6 +43,7 @@ export function Auth({ mode = "login", setPage, setUser }) {
   function clearPrivateSessionData() {
     localStorage.removeItem("cg_edit_resume_id");
     localStorage.removeItem("cg_edit_resume_data");
+    localStorage.removeItem("cg_edit_resume");
     localStorage.removeItem("cg_analyzer_resume_text");
     localStorage.removeItem("cg_analyzer_target_role");
   }
@@ -55,9 +54,7 @@ export function Auth({ mode = "login", setPage, setUser }) {
     const token = data?.token || data?.data?.token;
     const user = data?.user || data?.data?.user;
 
-    if (token) {
-      localStorage.setItem("cg_token", token);
-    }
+    if (token) localStorage.setItem("cg_token", token);
 
     if (user) {
       localStorage.setItem("cg_user", JSON.stringify(user));
@@ -67,12 +64,18 @@ export function Auth({ mode = "login", setPage, setUser }) {
         name: form.name || "User",
         email: form.email,
         targetRole: form.targetRole || "",
+        forcePasswordChange: data?.mustChangePassword || false,
       };
       localStorage.setItem("cg_user", JSON.stringify(fallbackUser));
       setUser(fallbackUser);
     }
 
-    localStorage.setItem("cg_current_page", "dashboard");
+    localStorage.setItem(
+      "cg_current_page",
+      data?.mustChangePassword || user?.forcePasswordChange
+        ? "change-password"
+        : "dashboard"
+    );
   }
 
   async function login() {
@@ -143,7 +146,7 @@ export function Auth({ mode = "login", setPage, setUser }) {
     }
   }
 
-  async function sendForgotOtp() {
+  async function noteForgotRequest() {
     setError("");
     setMessage("");
 
@@ -155,68 +158,18 @@ export function Auth({ mode = "login", setPage, setUser }) {
     setLoading(true);
 
     try {
-      const data = await apiRequest("/auth/forgot-password/send-otp", {
+      await apiRequest("/auth/forgot-password/contact-admin", {
         method: "POST",
-        body: JSON.stringify({
-          email: form.email,
-        }),
+        body: JSON.stringify({ email: form.email }),
       });
-
-      setOtpSent(true);
-      setForm((prev) => ({
-        ...prev,
-        otp: "",
-        newPassword: "",
-      }));
-
+    } catch (err) {
+      // Even if request save fails, user can still contact admin manually.
+      console.warn("Forgot request note failed:", err.message);
+    } finally {
+      setLoading(false);
       setMessage(
-        data.message ||
-          "Reset OTP generated. Admin will share the OTP with you manually."
+        `Please email ${ADMIN_EMAIL} from your registered email address. Admin will verify your account and share a temporary password.`
       );
-    } catch (err) {
-      setError(err.message || "Failed to generate reset OTP");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function resetPassword() {
-    setError("");
-    setMessage("");
-
-    if (!form.email || !form.otp || !form.newPassword) {
-      setError("Email, OTP and new password are required.");
-      return;
-    }
-
-    if (form.newPassword.length < 6) {
-      setError("New password must be at least 6 characters.");
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const data = await apiRequest("/auth/forgot-password/reset", {
-        method: "POST",
-        body: JSON.stringify({
-          email: form.email,
-          otp: form.otp,
-          newPassword: form.newPassword,
-        }),
-      });
-
-      setMessage(data.message || "Password reset successfully. Please login.");
-      setOtpSent(false);
-      setActiveMode("login");
-      setForm((prev) => ({
-        ...initialForm,
-        email: prev.email,
-      }));
-    } catch (err) {
-      setError(err.message || "Invalid OTP");
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -260,42 +213,29 @@ export function Auth({ mode = "login", setPage, setUser }) {
             and interview preparation.
           </p>
 
-          <p className="mt-4 max-w-xl rounded-2xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-100">
-            Forgot password OTP is generated for 24 hours. Admin will share the
-            reset OTP manually.
-          </p>
+          <div className="mt-4 max-w-xl rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm text-cyan-100">
+            Forgot password? Contact admin at <strong>{ADMIN_EMAIL}</strong>.
+            Admin will share a temporary password after verification.
+          </div>
         </div>
 
         <div className="rounded-3xl border border-white/10 bg-white p-6 text-slate-900 shadow-2xl dark:bg-slate-900 dark:text-white">
           <div className="mb-6 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-2 dark:bg-white/10">
-            <TabButton
-              active={isLogin}
-              onClick={() => switchMode("login")}
-              label="Login"
-            />
-            <TabButton
-              active={isSignup}
-              onClick={() => switchMode("signup")}
-              label="Signup"
-            />
-            <TabButton
-              active={isForgot}
-              onClick={() => switchMode("forgot")}
-              label="Forgot"
-            />
+            <TabButton active={isLogin} onClick={() => switchMode("login")} label="Login" />
+            <TabButton active={isSignup} onClick={() => switchMode("signup")} label="Signup" />
+            <TabButton active={isForgot} onClick={() => switchMode("forgot")} label="Forgot" />
           </div>
 
           <h2 className="text-2xl font-black">
             {isLogin && "Welcome Back"}
             {isSignup && "Create Account"}
-            {isForgot && "Reset Password"}
+            {isForgot && "Forgot Password"}
           </h2>
 
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">
             {isLogin && "Login with your email and password."}
             {isSignup && "Create your account directly. No signup OTP needed."}
-            {isForgot &&
-              "Enter your email. Admin will share OTP manually after it is generated."}
+            {isForgot && "Contact admin to receive a temporary password manually."}
           </p>
 
           {message && (
@@ -313,33 +253,10 @@ export function Auth({ mode = "login", setPage, setUser }) {
           <div className="mt-6 space-y-4">
             {isLogin && (
               <>
-                <Input
-                  value={form.email}
-                  onChange={(value) => update("email", value)}
-                  placeholder="Email"
-                  type="email"
-                  name="login-email"
-                  autoComplete="email"
-                />
-
-                <Input
-                  value={form.password}
-                  onChange={(value) => update("password", value)}
-                  placeholder="Password"
-                  type="password"
-                  name="login-password"
-                  autoComplete="current-password"
-                />
-
-                <ActionButton onClick={login} loading={loading}>
-                  Login
-                </ActionButton>
-
-                <button
-                  type="button"
-                  onClick={() => switchMode("forgot")}
-                  className="font-bold text-indigo-600 dark:text-cyan-300"
-                >
+                <Input value={form.email} onChange={(value) => update("email", value)} placeholder="Email" type="email" name="login-email" autoComplete="email" />
+                <Input value={form.password} onChange={(value) => update("password", value)} placeholder="Password" type="password" name="login-password" autoComplete="current-password" />
+                <ActionButton onClick={login} loading={loading}>Login</ActionButton>
+                <button type="button" onClick={() => switchMode("forgot")} className="font-bold text-indigo-600 dark:text-cyan-300">
                   Forgot password?
                 </button>
               </>
@@ -347,149 +264,52 @@ export function Auth({ mode = "login", setPage, setUser }) {
 
             {isSignup && (
               <>
-                <Input
-                  value={form.name}
-                  onChange={(value) => update("name", value)}
-                  placeholder="Full Name"
-                  name="signup-name"
-                  autoComplete="name"
-                />
-
-                <Input
-                  value={form.email}
-                  onChange={(value) => update("email", value)}
-                  placeholder="Email"
-                  type="email"
-                  name="signup-email"
-                  autoComplete="email"
-                />
-
-                <Input
-                  value={form.targetRole}
-                  onChange={(value) => update("targetRole", value)}
-                  placeholder="Target Role optional"
-                  name="signup-target-role"
-                />
-
-                <Input
-                  value={form.password}
-                  onChange={(value) => update("password", value)}
-                  placeholder="Create Password"
-                  type="password"
-                  name="signup-password"
-                  autoComplete="new-password"
-                />
-
-                <Input
-                  value={form.confirmPassword}
-                  onChange={(value) => update("confirmPassword", value)}
-                  placeholder="Confirm Password"
-                  type="password"
-                  name="signup-confirm-password"
-                  autoComplete="new-password"
-                />
-
-                <ActionButton onClick={signup} loading={loading}>
-                  Create Account
-                </ActionButton>
+                <Input value={form.name} onChange={(value) => update("name", value)} placeholder="Full Name" name="signup-name" autoComplete="name" />
+                <Input value={form.email} onChange={(value) => update("email", value)} placeholder="Email" type="email" name="signup-email" autoComplete="email" />
+                <Input value={form.targetRole} onChange={(value) => update("targetRole", value)} placeholder="Target Role optional" name="signup-target-role" />
+                <Input value={form.password} onChange={(value) => update("password", value)} placeholder="Create Password" type="password" name="signup-password" autoComplete="new-password" />
+                <Input value={form.confirmPassword} onChange={(value) => update("confirmPassword", value)} placeholder="Confirm Password" type="password" name="signup-confirm-password" autoComplete="new-password" />
+                <ActionButton onClick={signup} loading={loading}>Create Account</ActionButton>
               </>
             )}
 
             {isForgot && (
               <>
-                <Input
-                  value={form.email}
-                  onChange={(value) => update("email", value)}
-                  placeholder="Registered Email"
-                  type="email"
-                  disabled={otpSent}
-                  name="forgot-email"
-                  autoComplete="email"
-                />
+                <div className="rounded-2xl border border-amber-300/40 bg-amber-50 p-4 text-sm text-amber-800 dark:bg-amber-400/10 dark:text-amber-200">
+                  Send your registered email address to:
+                  <div className="mt-2 rounded-xl bg-white p-3 font-black text-slate-900 dark:bg-slate-950 dark:text-white">
+                    {ADMIN_EMAIL}
+                  </div>
+                  Admin will verify your account and send a temporary password.
+                  After login with temporary password, you must create a new password.
+                </div>
 
-                {!otpSent ? (
-                  <ActionButton onClick={sendForgotOtp} loading={loading}>
-                    Generate Reset OTP
-                  </ActionButton>
-                ) : (
-                  <>
-                    <Input
-                      value={form.otp}
-                      onChange={(value) =>
-                        update("otp", value.replace(/\D/g, ""))
-                      }
-                      placeholder="Enter OTP shared by admin"
-                      name="forgot-otp-code"
-                      autoComplete="one-time-code"
-                      inputMode="numeric"
-                    />
+                <Input value={form.email} onChange={(value) => update("email", value)} placeholder="Registered Email optional" type="email" name="forgot-email" autoComplete="email" />
 
-                    <Input
-                      value={form.newPassword}
-                      onChange={(value) => update("newPassword", value)}
-                      placeholder="Create New Password"
-                      type="password"
-                      name="forgot-new-password"
-                      autoComplete="new-password"
-                    />
-
-                    <ActionButton onClick={resetPassword} loading={loading}>
-                      Reset Password
-                    </ActionButton>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOtpSent(false);
-                        setForm((prev) => ({
-                          ...prev,
-                          otp: "",
-                          newPassword: "",
-                        }));
-                      }}
-                      className="font-bold text-slate-500 dark:text-slate-300"
-                    >
-                      Change email
-                    </button>
-                  </>
-                )}
+                <ActionButton onClick={noteForgotRequest} loading={loading}>
+                  Show Admin Contact
+                </ActionButton>
               </>
             )}
 
-            <button
-              type="button"
-              onClick={continueWithDemo}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 font-bold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10"
-            >
+            <button type="button" onClick={continueWithDemo} className="w-full rounded-2xl border border-slate-200 px-4 py-3 font-bold hover:bg-slate-50 dark:border-white/10 dark:hover:bg-white/10">
               Continue with Demo Account
             </button>
 
             {isLogin && (
-              <button
-                type="button"
-                onClick={() => switchMode("signup")}
-                className="font-bold text-indigo-600 dark:text-cyan-300"
-              >
+              <button type="button" onClick={() => switchMode("signup")} className="font-bold text-indigo-600 dark:text-cyan-300">
                 New user? Create account
               </button>
             )}
 
             {isSignup && (
-              <button
-                type="button"
-                onClick={() => switchMode("login")}
-                className="font-bold text-indigo-600 dark:text-cyan-300"
-              >
+              <button type="button" onClick={() => switchMode("login")} className="font-bold text-indigo-600 dark:text-cyan-300">
                 Already have account? Login
               </button>
             )}
 
             {isForgot && (
-              <button
-                type="button"
-                onClick={() => switchMode("login")}
-                className="font-bold text-indigo-600 dark:text-cyan-300"
-              >
+              <button type="button" onClick={() => switchMode("login")} className="font-bold text-indigo-600 dark:text-cyan-300">
                 Back to Login
               </button>
             )}
@@ -502,15 +322,7 @@ export function Auth({ mode = "login", setPage, setUser }) {
 
 function TabButton({ active, onClick, label }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-xl px-4 py-3 text-sm font-bold transition ${
-        active
-          ? "bg-white text-indigo-700 shadow dark:bg-slate-950 dark:text-cyan-300"
-          : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
-      }`}
-    >
+    <button type="button" onClick={onClick} className={`rounded-xl px-4 py-3 text-sm font-bold transition ${active ? "bg-white text-indigo-700 shadow dark:bg-slate-950 dark:text-cyan-300" : "text-slate-500 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"}`}>
       {label}
     </button>
   );
@@ -518,38 +330,14 @@ function TabButton({ active, onClick, label }) {
 
 function ActionButton({ children, onClick, loading }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={loading}
-      className="w-full rounded-2xl bg-indigo-600 px-4 py-4 font-black text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70"
-    >
+    <button type="button" onClick={onClick} disabled={loading} className="w-full rounded-2xl bg-indigo-600 px-4 py-4 font-black text-white shadow-lg shadow-indigo-500/20 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-70">
       {loading ? "Please wait..." : children}
     </button>
   );
 }
 
-function Input({
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-  disabled = false,
-  autoComplete = "off",
-  name,
-  inputMode,
-}) {
+function Input({ value, onChange, placeholder, type = "text", disabled = false, autoComplete = "off", name, inputMode }) {
   return (
-    <input
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      type={type}
-      disabled={disabled}
-      autoComplete={autoComplete}
-      name={name}
-      inputMode={inputMode}
-      className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 disabled:opacity-60 dark:border-white/10 dark:bg-white/5"
-    />
+    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} type={type} disabled={disabled} autoComplete={autoComplete} name={name} inputMode={inputMode} className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 disabled:opacity-60 dark:border-white/10 dark:bg-white/5" />
   );
 }

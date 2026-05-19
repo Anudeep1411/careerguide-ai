@@ -1,37 +1,74 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button, Card, PageHeader, ScoreCard } from "../components/Layout";
-import { roles } from "../data/mockData";
 import { apiRequest } from "../utils/api";
 
-export function ResumeAnalyzer({ setPage }) {
- const [targetRole, setTargetRole] = useState(
-  () => localStorage.getItem("cg_analyzer_target_role") || ""
-);
- const [resumeText, setResumeText] = useState(
-  () =>
-    localStorage.getItem("cg_analyzer_resume_text") ||
-    ""
-);
+const roleOptions = [
+  "Frontend Developer",
+  "React Developer",
+  "Full Stack Developer",
+  "MERN Stack Developer",
+  "Java Developer",
+  "Data Analyst",
+  "AI/ML Fresher",
+];
 
+export function ResumeAnalyzer() {
+  const [resumeText, setResumeText] = useState(() => localStorage.getItem("cg_analyzer_resume_text") || "");
+  const [targetRole, setTargetRole] = useState(() => localStorage.getItem("cg_analyzer_target_role") || "Frontend Developer");
   const [analysis, setAnalysis] = useState(null);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const savedResumeText = localStorage.getItem("cg_analyzer_resume_text");
+    const savedTargetRole = localStorage.getItem("cg_analyzer_target_role");
+
+    if (savedResumeText) setResumeText(savedResumeText);
+    if (savedTargetRole) setTargetRole(savedTargetRole);
+  }, []);
+
+  useEffect(() => {
+    async function loadHistory() {
+      try {
+        const data = await apiRequest("/analysis");
+        setHistory(data.analyses || []);
+      } catch {
+        setHistory([]);
+      }
+    }
+
+    loadHistory();
+  }, []);
+
+  const wordCount = useMemo(() => resumeText.trim().split(/\s+/).filter(Boolean).length, [resumeText]);
 
   async function analyzeResume() {
-    setLoading(true);
     setError("");
-    setAnalysis(null);
+    setMessage("");
+
+    if (!resumeText.trim()) {
+      setError("Resume text is required. Paste resume text or use Analyze This Resume from Resume Builder / History.");
+      return;
+    }
+
+    if (!targetRole.trim()) {
+      setError("Target role is required.");
+      return;
+    }
+
+    setLoading(true);
 
     try {
       const data = await apiRequest("/analysis", {
         method: "POST",
-        body: JSON.stringify({
-          targetRole,
-          resumeText,
-        }),
+        body: JSON.stringify({ resumeText, targetRole }),
       });
 
       setAnalysis(data.analysis);
+      setHistory((prev) => [data.analysis, ...prev]);
+      setMessage("Resume analyzed successfully ✅");
     } catch (err) {
       setError(err.message || "Resume analysis failed");
     } finally {
@@ -39,171 +76,148 @@ export function ResumeAnalyzer({ setPage }) {
     }
   }
 
-  const atsScore = analysis?.atsScore || 0;
-  const skillsFound = analysis?.skillsFound || [];
-  const missingSkills = analysis?.missingSkills || [];
-  const weakSections = analysis?.weakSections || [];
-  const suggestions = analysis?.suggestions || [];
+  function clearAnalyzerData() {
+    localStorage.removeItem("cg_analyzer_resume_text");
+    localStorage.removeItem("cg_analyzer_target_role");
+    setResumeText("");
+    setTargetRole("Frontend Developer");
+    setAnalysis(null);
+    setMessage("Analyzer fields cleared.");
+  }
+
+  const score = analysis?.atsScore || 0;
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
-        eyebrow="AI Resume Analyzer"
-        title="Analyze resume quality and ATS readiness"
-        desc="Paste your resume text and target role to get score, missing skills, weak sections and improvement suggestions."
-        action={
-          <Button onClick={analyzeResume}>
-            {loading ? "Analyzing..." : "Analyze Resume"}
-          </Button>
-        }
+        eyebrow="Resume Analyzer"
+        title="ATS Resume Analysis"
+        desc="Paste resume text or analyze a resume from Resume Builder / History. Get score, missing skills and improvements."
+        action={<Button onClick={analyzeResume}>{loading ? "Analyzing..." : "Analyze Resume"}</Button>}
       />
 
-      {error && (
-        <div className="mb-5 rounded-2xl bg-red-500/10 p-4 font-bold text-red-500">
-          {error}
-        </div>
-      )}
+      {message && <Notice tone="success">{message}</Notice>}
+      {error && <Notice tone="error">{error}</Notice>}
 
-      <div className="grid gap-5 xl:grid-cols-[430px_1fr]">
-        <div className="space-y-5">
-          <Card>
+      <div className="grid gap-6 xl:grid-cols-[1fr_0.9fr]">
+        <Card>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xl font-black">Resume Input</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-300">Words: {wordCount}</p>
+            </div>
+            <Button variant="soft" onClick={clearAnalyzerData}>Clear</Button>
+          </div>
+
+          <div className="space-y-4">
             <label className="block">
-              <span className="mb-2 block text-sm font-bold">Target Role</span>
-              <select
+              <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">Target Role</span>
+              <input
                 value={targetRole}
                 onChange={(e) => setTargetRole(e.target.value)}
+                list="role-options"
                 className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
-              >
-                {roles.map((role) => (
-                  <option key={role}>{role}</option>
-                ))}
-              </select>
+                placeholder="Frontend Developer"
+              />
+              <datalist id="role-options">
+                {roleOptions.map((role) => <option key={role} value={role} />)}
+              </datalist>
             </label>
 
-            <label className="mt-4 block">
-              <span className="mb-2 block text-sm font-bold">Resume Text</span>
+            <label className="block">
+              <span className="mb-2 block text-sm font-bold text-slate-600 dark:text-slate-300">Resume Text</span>
               <textarea
                 value={resumeText}
                 onChange={(e) => setResumeText(e.target.value)}
+                rows={16}
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
                 placeholder="Paste resume text here..."
-                className="h-80 w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 outline-none focus:border-indigo-500 dark:border-white/10 dark:bg-white/5"
               />
             </label>
 
-            <Button onClick={analyzeResume} className="mt-4 w-full">
-              {loading ? "Analyzing..." : "Run Resume Analysis"}
-            </Button>
-          </Card>
-
-          <Card>
-            <h2 className="text-xl font-black">How it works</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-500 dark:text-slate-400">
-              This version uses a rule-based analyzer. Later we will connect AI
-              API to give more advanced ATS feedback, better project bullets and
-              role-specific suggestions.
-            </p>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <ScoreCard
-              title="ATS Score"
-              value={atsScore}
-              label={atsScore >= 80 ? "Good" : atsScore >= 60 ? "Average" : "Improve"}
-              tone={atsScore >= 80 ? "success" : atsScore >= 60 ? "warning" : "danger"}
-              trend="+"
-            />
-
-            <ScoreCard
-              title="Skills Found"
-              value={Math.min(skillsFound.length * 15, 100)}
-              label={`${skillsFound.length} found`}
-              tone="success"
-              trend="+"
-            />
-
-            <ScoreCard
-              title="Missing Skills"
-              value={Math.max(100 - missingSkills.length * 15, 0)}
-              label={`${missingSkills.length} missing`}
-              tone={missingSkills.length > 3 ? "danger" : "warning"}
-              trend="+"
-            />
-
-            <ScoreCard
-              title="Project Strength"
-              value={weakSections.length === 0 ? 90 : 65}
-              label={weakSections.length === 0 ? "Strong" : "Improve"}
-              tone={weakSections.length === 0 ? "success" : "warning"}
-              trend="+"
-            />
+            <Button onClick={analyzeResume}>{loading ? "Analyzing..." : "Analyze Resume"}</Button>
           </div>
+        </Card>
 
-          {!analysis ? (
+        <div className="space-y-6">
+          <ScoreCard
+            title="ATS Score"
+            value={score}
+            label={score >= 75 ? "Strong" : score >= 50 ? "Needs polish" : "Needs improvement"}
+            tone={score >= 75 ? "success" : score >= 50 ? "warning" : "danger"}
+          />
+
+          {analysis ? (
             <Card>
-              <div className="grid min-h-[360px] place-items-center text-center">
+              <h2 className="text-xl font-black">Analysis Result</h2>
+              <div className="mt-4 space-y-5">
+                <ResultBlock title="Skills Found" items={analysis.skillsFound} empty="No required skills detected yet." tone="success" />
+                <ResultBlock title="Missing Skills" items={analysis.missingSkills} empty="No major missing skills found." tone="warning" />
+                <ResultBlock title="Weak Sections" items={analysis.weakSections} empty="No weak sections detected." tone="danger" />
+
                 <div>
-                  <div className="mx-auto grid h-16 w-16 place-items-center rounded-3xl bg-indigo-600/10 text-3xl">
-                    🔍
-                  </div>
-                  <h2 className="mt-4 text-2xl font-black">No analysis yet</h2>
-                  <p className="mt-2 max-w-md text-sm leading-6 text-slate-500 dark:text-slate-400">
-                    Paste resume text and click Analyze Resume to see ATS score,
-                    missing skills and improvement suggestions.
-                  </p>
+                  <h3 className="font-black">Suggestions</h3>
+                  <ul className="mt-2 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    {(analysis.suggestions || []).map((suggestion) => <li key={suggestion}>• {suggestion}</li>)}
+                  </ul>
                 </div>
+
+                {analysis.improvedSummary && (
+                  <div className="rounded-2xl bg-indigo-50 p-4 text-sm text-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-200">
+                    <p className="font-black">Improved Summary</p>
+                    <p className="mt-1">{analysis.improvedSummary}</p>
+                  </div>
+                )}
               </div>
             </Card>
           ) : (
             <Card>
-              <h2 className="text-2xl font-black">Resume Analysis Report</h2>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <ResultBox title="Skills Found" items={skillsFound} empty="No matching skills found" />
-                <ResultBox title="Missing Skills" items={missingSkills} empty="No missing skills" />
-                <ResultBox title="Weak Sections" items={weakSections} empty="No weak sections detected" />
-                <ResultBox title="Suggestions" items={suggestions} empty="No suggestions" />
-              </div>
-
-              <div className="mt-5 rounded-2xl bg-indigo-600/10 p-4">
-                <h3 className="font-black text-indigo-600 dark:text-cyan-300">
-                  Improved Summary
-                </h3>
-                <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-                  {analysis.improvedSummary}
-                </p>
-              </div>
-
-              <div className="mt-5 flex flex-wrap gap-3">
-                <Button variant="soft">Save Analysis</Button>
-                <Button variant="soft">Download Report</Button>
-                <Button onClick={() => setPage("interview")} variant="soft">
-                  Practice Interview
-                </Button>
-              </div>
+              <h2 className="text-xl font-black">No analysis yet</h2>
+              <p className="mt-2 text-sm text-slate-500 dark:text-slate-300">Analyze a resume to see ATS score, missing skills and improvements.</p>
             </Card>
           )}
         </div>
       </div>
+
+      <Card>
+        <h2 className="text-xl font-black">Recent Analyses</h2>
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {history.length ? history.slice(0, 6).map((item) => (
+            <div key={item._id || item.createdAt} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-white/10 dark:bg-white/5">
+              <p className="font-black">{item.targetRole}</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-300">Score: {item.atsScore}/100</p>
+              <p className="mt-1 text-xs text-slate-500">{item.createdAt ? new Date(item.createdAt).toLocaleString() : ""}</p>
+            </div>
+          )) : <p className="text-sm text-slate-500 dark:text-slate-300">No analysis history yet.</p>}
+        </div>
+      </Card>
     </div>
   );
 }
 
-function ResultBox({ title, items, empty }) {
-  return (
-    <div className="rounded-2xl bg-slate-50 p-4 dark:bg-white/5">
-      <h3 className="font-black">{title}</h3>
+function Notice({ tone, children }) {
+  const styles = tone === "success"
+    ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:border-emerald-500/20"
+    : "bg-red-50 text-red-700 border-red-200 dark:bg-red-500/10 dark:text-red-300 dark:border-red-500/20";
 
-      {items.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-500 dark:text-slate-400">{empty}</p>
-      ) : (
-        <ul className="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
-          {items.map((item) => (
-            <li key={item}>• {item}</li>
-          ))}
-        </ul>
-      )}
+  return <div className={`rounded-3xl border p-4 text-sm font-semibold ${styles}`}>{children}</div>;
+}
+
+function ResultBlock({ title, items = [], empty, tone }) {
+  const toneClass = {
+    success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300",
+    warning: "bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300",
+    danger: "bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-300",
+  }[tone];
+
+  return (
+    <div>
+      <h3 className="font-black">{title}</h3>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {items?.length ? items.map((item) => (
+          <span key={item} className={`rounded-full px-3 py-2 text-xs font-bold ${toneClass}`}>{item}</span>
+        )) : <p className="text-sm text-slate-500 dark:text-slate-300">{empty}</p>}
+      </div>
     </div>
   );
 }

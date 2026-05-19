@@ -8,6 +8,7 @@ import { JobOffers } from "./pages/JobOffers";
 import { InterviewPractice } from "./pages/Interview";
 import { History, Profile, Settings, Templates } from "./pages/OtherPages";
 import { Auth } from "./pages/Auth";
+import { ChangePassword } from "./pages/ChangePassword";
 import { load, save } from "./utils/storage";
 
 export default function App() {
@@ -19,15 +20,8 @@ export default function App() {
     const savedPage = localStorage.getItem("cg_current_page");
 
     if (!savedUser) return "login";
-
-    if (
-      savedPage &&
-      savedPage !== "login" &&
-      savedPage !== "signup"
-    ) {
-      return savedPage;
-    }
-
+    if (savedUser?.forcePasswordChange) return "change-password";
+    if (savedPage && savedPage !== "login" && savedPage !== "signup") return savedPage;
     return "dashboard";
   });
 
@@ -49,6 +43,12 @@ export default function App() {
       return;
     }
 
+    if (user?.forcePasswordChange && nextPage !== "change-password") {
+      setPage("change-password");
+      localStorage.setItem("cg_current_page", "change-password");
+      return;
+    }
+
     setPage(nextPage);
 
     if (nextPage !== "login" && nextPage !== "signup") {
@@ -61,6 +61,13 @@ export default function App() {
 
     if (nextUser) {
       save("cg_user", nextUser);
+
+      if (nextUser?.forcePasswordChange) {
+        localStorage.setItem("cg_current_page", "change-password");
+        setPage("change-password");
+        return;
+      }
+
       localStorage.setItem("cg_current_page", "dashboard");
       setPage("dashboard");
     }
@@ -71,65 +78,31 @@ export default function App() {
     localStorage.removeItem("cg_user");
     localStorage.removeItem("cg_current_page");
     localStorage.removeItem("cg_edit_resume_id");
-localStorage.removeItem("cg_edit_resume_data");
-localStorage.removeItem("cg_analyzer_resume_text");
-localStorage.removeItem("cg_analyzer_target_role");
+    localStorage.removeItem("cg_edit_resume_data");
+    localStorage.removeItem("cg_analyzer_resume_text");
+    localStorage.removeItem("cg_analyzer_target_role");
+
     setUser(null);
     setPage("login");
   }
 
   function renderPage() {
-    if (page === "dashboard") {
-      return <Dashboard setPage={handleSetPage} />;
-    }
-
-    if (page === "builder") {
-      return <ResumeBuilder setPage={handleSetPage} />;
-    }
-
-    if (page === "analyzer") {
-      return <ResumeAnalyzer setPage={handleSetPage} />;
-    }
-
-    if (page === "jobmatch") {
-      return <JobMatch setPage={handleSetPage} />;
-    }
-
-    if (page === "joboffers") {
-      return <JobOffers />;
-    }
-
-    if (page === "interview") {
-      return <InterviewPractice />;
-    }
-
-    if (page === "history") {
-      return <History setPage={handleSetPage} />;
-    }
-
-    if (page === "templates") {
-      return <Templates />;
-    }
-
-    if (page === "profile") {
-      return <Profile />;
-    }
-
-    if (page === "settings") {
-      return <Settings theme={theme} setTheme={setTheme} />;
-    }
-
+    if (page === "dashboard") return <Dashboard setPage={handleSetPage} />;
+    if (page === "builder") return <ResumeBuilder setPage={handleSetPage} />;
+    if (page === "analyzer") return <ResumeAnalyzer setPage={handleSetPage} />;
+    if (page === "jobmatch") return <JobMatch />;
+    if (page === "joboffers") return <JobOffers />;
+    if (page === "interview") return <InterviewPractice />;
+    if (page === "history") return <History setPage={handleSetPage} />;
+    if (page === "templates") return <Templates setPage={handleSetPage} />;
+    if (page === "profile") return <Profile />;
+    if (page === "settings") return <Settings theme={theme} setTheme={setTheme} setPage={handleSetPage} />;
+    if (page === "change-password") return <ChangePassword setPage={handleSetPage} setUser={handleSetUser} user={user} />;
     return <Dashboard setPage={handleSetPage} />;
   }
 
   if (!user) {
-    return (
-      <Auth
-        mode={page === "signup" ? "signup" : "login"}
-        setPage={handleSetPage}
-        setUser={handleSetUser}
-      />
-    );
+    return <Auth mode={page === "signup" ? "signup" : "login"} setPage={setPage} setUser={handleSetUser} />;
   }
 
   return (
